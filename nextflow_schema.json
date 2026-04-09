@@ -17,6 +17,9 @@
                     "enum": [
                         "setup",
                         "test",
+                        "fastqc",
+                        "fastp",
+                        "contiglib",
                         "all"
                     ],
                     "description": "Pipeline running mode"
@@ -200,6 +203,11 @@
                     "description": "DeepVirFinder q-value",
                     "default": 0.1
                 },
+                "dvf_maxlen": {
+                    "type": "integer",
+                    "description": "DeepVirFinder maximum contig length",
+                    "default": 1000000
+                },
                 "virsorter2_groups": {
                     "type": "string",
                     "description": "Category of viruses, can be one or multiple of \"dsDNAphage,NCLDV,RNA,ssDNA,lavidaviridae\"",
@@ -318,11 +326,6 @@
                     "default": false
                 },
                 "input_contigs": {
-                    "type": "string",
-                    "description": "Input contigs file",
-                    "default": null
-                },
-                "decontam": {
                     "type": "string",
                     "description": "Input contigs file",
                     "default": null

@@ -15,7 +15,7 @@ process VIRALHOST_IPHOP {
     task.ext.when == null || task.ext.when
 
     """
-    iphop predict --fa_file $contigs --out_dir out_iphop --db_dir ${params.db}/iphop/Sept_2021_pub --num_threads $task.cpus
+    iphop predict --fa_file $contigs --out_dir out_iphop --db_dir ${params.db}/iphop/Aug_2023_pub_rw --num_threads $task.cpus
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
