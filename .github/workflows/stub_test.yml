@@ -25,18 +25,11 @@ jobs:
         with:
           version: ">=23.04.0"
 
-      - name: Resolve samplesheet paths
-        run: |
-          export STUB_R1_PATH="${{ github.workspace }}/tests/data/stub_R1.fastq.gz"
-          export STUB_R2_PATH="${{ github.workspace }}/tests/data/stub_R2.fastq.gz"
-          envsubst '$STUB_R1_PATH $STUB_R2_PATH' < tests/data/samplesheet_stub.csv > /tmp/samplesheet_stub.csv
-
       - name: Run stub test
         run: |
           nextflow run main.nf \
             -stub \
             -profile test_stub \
-            --input /tmp/samplesheet_stub.csv \
             --outdir output_stub \
             -with-trace \
             2>&1 | tee nextflow_stub.log
