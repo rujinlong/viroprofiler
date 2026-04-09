@@ -53,12 +53,11 @@ include { MULTIQC                      } from '../modules/nf-core/modules/multiq
 include { CUSTOM_DUMPSOFTWAREVERSIONS  } from '../modules/nf-core/modules/custom/dumpsoftwareversions/main'
 include { FASTP                        } from '../modules/nf-core/modules/fastp/main'
 include { SPADES                       } from '../modules/nf-core/modules/spades/main'
-include { BBMAP_ALIGN                  } from '../modules/nf-core/modules/bbmap/align/main'
 // local modules
 include { DECONTAM                     } from '../modules/local/decontam'
 include { CONTIGLIB; CONTIGLIB_CLUSTER } from '../modules/local/contig_library'
-include { MAPPING2CONTIGS; CONTIGINDEX; MAPPING2CONTIGS2; ABUNDANCE   } from '../modules/local/abundance'
-include { BRACKEN_DB; BRACKEN; BRACKEN_COMBINEBRACKENOUTPUTS } from '../modules/local/bracken'
+include { CONTIGINDEX; MAPPING2CONTIGS2; ABUNDANCE   } from '../modules/local/abundance'
+include { BRACKEN; BRACKEN_COMBINEBRACKENOUTPUTS } from '../modules/local/bracken'
 include { DRAMV; EMAPPER; ABRICATE     } from '../modules/local/annotation'
 include { VIRALHOST_IPHOP              } from '../modules/local/viral_host'
 include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
@@ -81,7 +80,8 @@ workflow CONTIGANNO {
     // MODULE: CheckV
     CHECKV(ch_cclib)
     clean_cclib_long = CHECKV.out.checkv_qc_ch
-    ch_nrclib = clean_cclib_long
+    CONTIGLIB_CLUSTER(clean_cclib_long)
+    ch_nrclib = CONTIGLIB_CLUSTER.out.nrclib_ch
 
     // Gene library
     GENEPRED4CTG (clean_cclib_long, "ccclib_long")

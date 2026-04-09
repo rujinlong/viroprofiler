@@ -53,12 +53,11 @@ include { MULTIQC                      } from '../modules/nf-core/modules/multiq
 include { CUSTOM_DUMPSOFTWAREVERSIONS  } from '../modules/nf-core/modules/custom/dumpsoftwareversions/main'
 include { FASTP                        } from '../modules/nf-core/modules/fastp/main'
 include { SPADES                       } from '../modules/nf-core/modules/spades/main'
-include { BBMAP_ALIGN                  } from '../modules/nf-core/modules/bbmap/align/main'
 // local modules
 include { DECONTAM                     } from '../modules/local/decontam'
 include { CONTIGLIB; CONTIGLIB_CLUSTER } from '../modules/local/contig_library'
-include { MAPPING2CONTIGS; CONTIGINDEX; MAPPING2CONTIGS2; ABUNDANCE   } from '../modules/local/abundance'
-include { BRACKEN_DB; BRACKEN; BRACKEN_COMBINEBRACKENOUTPUTS } from '../modules/local/bracken'
+include { CONTIGINDEX; MAPPING2CONTIGS2; ABUNDANCE   } from '../modules/local/abundance'
+include { BRACKEN; BRACKEN_COMBINEBRACKENOUTPUTS } from '../modules/local/bracken'
 include { DRAMV; EMAPPER; ABRICATE     } from '../modules/local/annotation'
 include { VIRALHOST_IPHOP              } from '../modules/local/viral_host'
 include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
@@ -253,7 +252,7 @@ workflow VIROPROFILER {
 
             // Using kraken2 and bracken
             if ( params.use_kraken2 ) {
-                BRACKEN(ch_clean_reads, ${params.db}/kraken2)
+                BRACKEN(ch_clean_reads, "${params.db}/kraken2")
                 BRACKEN_COMBINEBRACKENOUTPUTS(BRACKEN.out.ch_reports.collect())
             }
 

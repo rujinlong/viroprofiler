@@ -79,7 +79,7 @@ process MAPPING2CONTIGS2 {
     def prefix = task.ext.prefix ?: "${meta.id}"
     def illumina_reads = illumina ? ( meta.single_end ? "-s $illumina" : "-1 ${illumina[0]} -2 ${illumina[1]}" ) : ""
     """
-    bowtie2 -x ${bowtie2}/bowtie2idx -1 ${illumina[0]} -2 ${illumina[1]} -S ${meta.id}.sam -p $task.cpus
+    bowtie2 -x ${bowtie2}/bowtie2idx $illumina_reads -S ${meta.id}.sam -p $task.cpus
     samtools view -bS ${meta.id}.sam > ${meta.id}_unsorted.bam
     samtools sort ${meta.id}_unsorted.bam -o ${meta.id}_sorted.bam
     samtools index ${meta.id}_sorted.bam

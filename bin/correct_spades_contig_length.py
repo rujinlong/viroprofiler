@@ -6,7 +6,7 @@ from Bio import SeqIO
 
 def replace_seq_length(rec):
     rec_len = len(rec.seq)
-    new_id = re.sub("_length_(\d+)_cov_", "_length_"+str(rec_len)+"_cov_", rec.id)
+    new_id = re.sub(r"_length_(\d+)_cov_", "_length_"+str(rec_len)+"_cov_", rec.id)
     rec.id = new_id
     rec.name = new_id
     rec.description = ""

@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/opt/conda/pkgs micromamba create -f /tmp/env_vrhy
 RUN cd /opt && \
     wget "https://github.com/AnantharamanLab/vRhyme/raw/master/vRhyme/models/vRhyme_machine_model_ET.sav.gz" && \
     gunzip vRhyme_machine_model_ET.sav.gz && \
-    mv vRhyme_machine_model_ET.sav /opt/conda/lib/python3.1/site-packages/vRhyme/models/
+    mv vRhyme_machine_model_ET.sav $(python3 -c "import site; print(site.getsitepackages()[0])")/vRhyme/models/
 
 # DeepVirFinder is installed in `viroprofiler_dvf` env.
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba create -f /tmp/env_dvf.yml -y
