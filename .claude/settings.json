@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f .claude/context/PLAN.md ]; then echo '[PM] Project context detected.'; fi; if [ -f .claude/context/MANUSCRIPT_PIPELINE.json ]; then phase=$(python3 -c \"import json; d=json.load(open('.claude/context/MANUSCRIPT_PIPELINE.json')); print(f'Phase {d.get(\\\"current_phase\\\",0)}/6')\" 2>/dev/null || echo 'unknown'); echo \"[MP] Manuscript pipeline active ($phase).\"; fi; if [ -f .claude/context/PLAN.md ]; then echo 'Run /pm sync for full status.'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

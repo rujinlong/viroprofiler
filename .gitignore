@@ -7,5 +7,3 @@ results
 .DS_Store
 testing*
 *.pyc
-CLAUDE.md
-.claude/
