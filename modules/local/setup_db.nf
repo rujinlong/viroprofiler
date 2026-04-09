@@ -5,9 +5,15 @@ process DB_VIROPROFILER {
     when:
     params.mode == "setup"
 
+    script:
     """
     # TODO
     echo "Please download checkv database manually"
+    """
+
+    stub:
+    """
+    echo "DB_VIROPROFILER stub"
     """
 }
 
@@ -18,6 +24,7 @@ process DB_CHECKV {
     when:
     params.mode == "setup"
 
+    script:
     """
     if [ ! -d ${params.db}/checkv ]; then
         checkv download_database $params.db
@@ -25,6 +32,12 @@ process DB_CHECKV {
     else
         echo "CheckV database already exists"
     fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/checkv
+    echo "DB_CHECKV stub"
     """
 }
 
@@ -36,6 +49,7 @@ process DB_PHAMB {
     when:
     params.mode == "setup"
 
+    script:
     """
     if [ ! -d ${params.db}/phamb ]; then
         mkdir -p $params.db/phamb
@@ -44,6 +58,12 @@ process DB_PHAMB {
     else
         echo "PHAMB database already exists"
     fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/phamb
+    echo "DB_PHAMB stub"
     """
 }
 
@@ -55,12 +75,19 @@ process DB_VIRSORTER2 {
     when:
     params.mode == "setup"
 
+    script:
     """
     if [ ! -d ${params.db}/virsorter2 ]; then
         virsorter setup -d ${params.db}/virsorter2 -j $task.cpus
     else
         echo "VirSorter2 database already exists"
     fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/virsorter2
+    echo "DB_VIRSORTER2 stub"
     """
 }
 
@@ -72,6 +99,7 @@ process DB_DRAM {
     when:
     params.mode == "setup"
 
+    script:
     """
     if [ ! -d ${params.db}/dram ]; then
         # Create DRAM database CONFIG file
@@ -82,6 +110,12 @@ process DB_DRAM {
         echo "DRAM database already exists"
     fi
     """
+
+    stub:
+    """
+    mkdir -p ${params.db}/dram
+    echo "DB_DRAM stub"
+    """
 }
 
 process DB_VIBRANT {
@@ -91,6 +125,7 @@ process DB_VIBRANT {
     when:
     params.mode == "setup"
 
+    script:
     """
     if [ ! -d ${params.db}/vibrant ]; then
         mkdir -p ${params.db}/vibrant
@@ -99,6 +134,12 @@ process DB_VIBRANT {
     else
         echo "VIBRANT database already exists"
     fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/vibrant
+    echo "DB_VIBRANT stub"
     """
 }
 
@@ -110,6 +151,7 @@ process DB_VREFSEQ {
     when:
     params.mode == "setup"
 
+    script:
     """
     # Download NCBI taxonomy
     if [ ! -d ${params.db}/taxonomy/taxdump ]; then
@@ -140,6 +182,13 @@ process DB_VREFSEQ {
         echo "vRefSeq database already exists"
     fi
     """
+
+    stub:
+    """
+    mkdir -p ${params.db}/taxonomy/taxdump
+    mkdir -p ${params.db}/taxonomy/mmseqs_vrefseq
+    echo "DB_VREFSEQ stub"
+    """
 }
 
 
@@ -150,17 +199,24 @@ process DB_IPHOP {
     when:
     params.mode == "setup"
 
+    script:
     """
     if [ ! -d ${params.db}/iphop ]; then
         mkdir -p ${params.db}/iphop
         iphop download -d $params.db/iphop -n
-        
+
         # Remove the tar.gz file to save space
         sleep 10
         rm -rf ${params.db}/iphop/iPHoP_db_Sept21.tar.gz
     else
         echo "iPHOP database already exists"
     fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/iphop
+    echo "DB_IPHOP stub"
     """
 }
 
@@ -172,6 +228,7 @@ process DB_EGGNOG {
     when:
     params.mode == "setup"
 
+    script:
     """
     if [ ! -d ${params.db}/eggnog ]; then
         mkdir -p ${params.db}/eggnog
@@ -179,6 +236,12 @@ process DB_EGGNOG {
     else
         echo "EggNOG database already exists"
     fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/eggnog
+    echo "DB_EGGNOG stub"
     """
 }
 
@@ -190,6 +253,7 @@ process DB_VOGDB {
     when:
     params.mode == "setup"
 
+    script:
     """
     if [ ! -d ${params.db}/vogdb ]; then
         mkdir -p ${params.db}/vogdb
@@ -203,6 +267,12 @@ process DB_VOGDB {
         echo "VOGDB database already exists"
     fi
     """
+
+    stub:
+    """
+    mkdir -p ${params.db}/vogdb
+    echo "DB_VOGDB stub"
+    """
 }
 
 process DB_MICOMPLETEDB {
@@ -212,6 +282,7 @@ process DB_MICOMPLETEDB {
     when:
     params.mode == "setup"
 
+    script:
     """
     if [ ! -d ${params.db}/micomplete ]; then
         mkdir -p ${params.db}/micomplete
@@ -219,6 +290,12 @@ process DB_MICOMPLETEDB {
     else
         echo "Micomplete database already exists"
     fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/micomplete
+    echo "DB_MICOMPLETEDB stub"
     """
 }
 
@@ -230,6 +307,7 @@ process DB_KRAKEN2 {
     when:
     params.mode == "setup"
 
+    script:
     """
     # Download Kraken2 taxonomy database
     if [ ! -d ${params.db}/kraken2/taxonomy ]; then
@@ -255,6 +333,12 @@ process DB_KRAKEN2 {
     if [ "${params.kraken2_clean}" == "true" ]; then
         rm -rf ${params.db}/kraken2/taxonomy
     fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/kraken2
+    echo "DB_KRAKEN2 stub"
     """
 }
 
