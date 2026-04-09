@@ -13,7 +13,9 @@ COPY ./docker/viroprofiler-geneannot/env_*.yml /tmp
 
 # install DRAM to `base` env
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba install -n base -f /tmp/env_dram.yml -y
-COPY ./docker/viroprofiler-geneannot/database_handler.py /opt/conda/lib/python3.10/site-packages/mag_annotator
+COPY ./docker/viroprofiler-geneannot/database_handler.py /tmp/database_handler.py
+RUN SITE_PKGS=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
+    cp /tmp/database_handler.py $SITE_PKGS/mag_annotator/
 
 # Install emapper to `viroprofiler_emapper` env
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba create -f /tmp/env_emapper.yml -y

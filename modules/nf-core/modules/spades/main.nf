@@ -70,4 +70,17 @@ process SPADES {
         spades: \$(spades.py --version 2>&1 | sed 's/^.*SPAdes genome assembler v//; s/ .*\$//')
     END_VERSIONS
     """
+
+    stub:
+    def prefix = task.ext.prefix ?: "${meta.id}"
+    """
+    printf '>stub_contig_1\nACGTACGTACGTACGTACGTACGT\n' | gzip > ${prefix}.scaffolds.fa.gz
+    printf '>stub_contig_1\nACGTACGTACGTACGTACGTACGT\n' | gzip > ${prefix}.contigs.fa.gz
+    touch ${prefix}.spades.log
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        spades: 3.15.4
+    END_VERSIONS
+    """
 }

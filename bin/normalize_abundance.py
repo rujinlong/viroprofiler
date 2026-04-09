@@ -23,7 +23,7 @@ def main(fin_abundance, fin_covfrac, fout, covfrac_cutoff, reads_length, inflati
     df_covfrac = read_coverm(fin_covfrac)
     
     # normalize coverage fraction: set value to 0 if they are less than the cutoff, otherwise set to 1
-    df_covfrac = df_covfrac.map(lambda x: 0 if x < covfrac_cutoff else 1)
+    df_covfrac = (df_covfrac >= covfrac_cutoff).astype(int)
 
     # multiply the abundance by the normalized coverage fraction
     df_abundance_normalized = df_abundance * df_covfrac

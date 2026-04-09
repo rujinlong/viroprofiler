@@ -30,5 +30,10 @@ process RESULTS_TSE {
                  --fin_dvf $dvf_score \\
                  --fin_replicyc $replicyc_type
     """
+
+    stub:
+    """
+    touch viroprofiler_results.rds
+    """
 }
 

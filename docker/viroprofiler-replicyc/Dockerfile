@@ -12,7 +12,8 @@ COPY ./docker/viroprofiler-replicyc/env_*.yml /tmp
 
 # Install packages into `base` env
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba install -n base -f /tmp/env_replidec.yml -y
-RUN cd /opt/conda/lib/python3.10/site-packages/Replidec && \
+RUN REPLIDEC_DIR=$(python3 -c "import site; print(site.getsitepackages()[0])")/Replidec && \
+    cd $REPLIDEC_DIR && \
     wget https://zenodo.org/record/6975142/files/db_v0.2.3.tar.gz && \
     tar xzf db_v0.2.3.tar.gz && \
     rm db_v0.2.3.tar.gz

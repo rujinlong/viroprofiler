@@ -21,6 +21,13 @@ process GENEPRED {
     sed 's/*//' prodigal/all.faa |  grep -v '^\$' > genes_${prefix}.faa
     sed 's/*//' prodigal/all.fna |  grep -v '^\$' > genes_${prefix}.fna
     """
+
+    stub:
+    """
+    printf '>stub_gene_1\nACGTACGT\n' > genes_${prefix}.fna
+    printf '>stub_gene_1\nMKVL\n' > genes_${prefix}.faa
+    printf '##gff-version 3\n' > genes_${prefix}.gff
+    """
 }
 
 process NRSEQS {
@@ -41,6 +48,12 @@ process NRSEQS {
 
     """
     mmseqs easy-cluster $seqs $prefix tmp --min-seq-id $min_similarity -c $min_coverage --threads $task.cpus
+    """
+
+    stub:
+    """
+    printf '>stub_seq\nACGT\n' > ${prefix}_rep_seq.fasta
+    printf 'representative\tmember\n' > ${prefix}_cluster.tsv
     """
 
 }

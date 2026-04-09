@@ -30,6 +30,17 @@ process MAPPING2CONTIGS {
         samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
     END_VERSIONS
     """
+
+    stub:
+    """
+    touch ${meta.id}.bam
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        minimap2: 2.24
+        samtools: 1.15.1
+    END_VERSIONS
+    """
 }
 
 process CONTIGINDEX {
@@ -49,11 +60,23 @@ process CONTIGINDEX {
     def args = task.ext.args ?: ''
     """
     mkdir -p bowtie2
-    bowtie2-build $args --threads $task.cpus $contigs bowtie2/bowtie2idx  
+    bowtie2-build $args --threads $task.cpus $contigs bowtie2/bowtie2idx
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         bowtie2: \$(echo \$(bowtie2 --version 2>&1) | sed 's/^.*bowtie2-align-s version //; s/ .*\$//')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    mkdir -p bowtie2
+    touch bowtie2/idx.1.bt2
+    touch bowtie2/idx.rev.1.bt2
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        bowtie2: 2.4.4
     END_VERSIONS
     """
 }
@@ -93,6 +116,18 @@ process MAPPING2CONTIGS2 {
         coverm: \$(echo \$(coverm --version 2>&1) | sed 's/^.*coverm //; s/ .*\$//')
     END_VERSIONS
     """
+
+    stub:
+    """
+    touch ${meta.id}.bam
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        bowtie2: 2.4.4
+        samtools: 1.15.1
+        coverm: 0.6.1
+    END_VERSIONS
+    """
 }
 
 
@@ -130,5 +165,15 @@ process ABUNDANCE {
     
     # compresss count table
     pigz -p $task.cpus abundance_contigs_*.tsv
+    """
+
+    stub:
+    """
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_count.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_covered_fraction.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_tpm.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_rpkm.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_trimmed_mean.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_reads_per_base.tsv.gz
     """
 }

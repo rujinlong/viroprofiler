@@ -94,4 +94,33 @@ process FASTP {
         END_VERSIONS
         """
     }
+
+    stub:
+    def prefix = task.ext.prefix ?: "${meta.id}"
+    if (meta.single_end) {
+        """
+        printf '>r1\nACGT\n' | gzip > ${prefix}.fastp.fastq.gz
+        touch ${prefix}.fastp.json
+        touch ${prefix}.fastp.html
+        touch ${prefix}.fastp.log
+
+        cat <<-END_VERSIONS > versions.yml
+        "${task.process}":
+            fastp: 0.23.4
+        END_VERSIONS
+        """
+    } else {
+        """
+        printf '>r1\nACGT\n' | gzip > ${prefix}_1.fastp.fastq.gz
+        printf '>r1\nACGT\n' | gzip > ${prefix}_2.fastp.fastq.gz
+        touch ${prefix}.fastp.json
+        touch ${prefix}.fastp.html
+        touch ${prefix}.fastp.log
+
+        cat <<-END_VERSIONS > versions.yml
+        "${task.process}":
+            fastp: 0.23.4
+        END_VERSIONS
+        """
+    }
 }

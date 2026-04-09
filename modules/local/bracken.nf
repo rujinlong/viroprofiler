@@ -31,6 +31,12 @@ process BRACKEN_DB {
     bracken-build -d brackenDB
     kraken2-build --clean --db brackenDB
     """
+
+    stub:
+    """
+    mkdir -p brackenDB
+    touch brackenDB/database.kmer_distrib
+    """
 }
 
 process BRACKEN {
@@ -87,6 +93,18 @@ process BRACKEN {
         bracken: ${VERSION}
     END_VERSIONS
     """
+
+    stub:
+    def prefix = task.ext.prefix ?: "${meta.id}"
+    """
+    printf 'name\ttaxonomy_id\ttaxonomy_lvl\tkraken_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads\n' > ${prefix}.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        kraken2: 2.1.2
+        bracken: 2.8
+    END_VERSIONS
+    """
 }
 
 
@@ -111,6 +129,11 @@ process BRACKEN_COMBINEBRACKENOUTPUTS {
     combine_bracken_outputs.py \\
         --files ${input} \\
         -o abundance_bracken.txt
+    """
+
+    stub:
+    """
+    printf 'name\ttaxonomy_id\tfraction_total_reads\n' > abundance_bracken.txt
     """
 }
 

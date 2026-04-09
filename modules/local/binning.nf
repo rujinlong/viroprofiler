@@ -20,6 +20,13 @@ process VAMB {
     paste col1to3.txt cut.txt | csvtk filter -t -f "contigLen>=$params.binning_minlen_contig" > depth_clean.txt
     vamb --outdir out_vamb --fasta $contigs -m $params.binning_minlen_contig --jgi depth_clean.txt -o __ --minfasta $params.binning_minlen_contig
     """
+
+    stub:
+    """
+    mkdir -p out_vamb/bins
+    printf 'contigname\tbinid\n' > out_vamb/clusters.tsv
+    touch out_vamb/bins/stub_bin.fna
+    """
 }
 
 
@@ -44,6 +51,13 @@ process PHAMB_RF{
     """
     run_RF.py -f $CONTIGS -d $output_dvf -p $hmm_MiComplete -g $hmm_VOGDB -c $cluster  -l $params.binning_minlen_contig -m /opt/phamb/workflows/mag_annotation/dbs/RF_model.python39.sav -s $params.binning_minlen_bin -o .
     mv vamb_bins/vamb_bins.1.fna .
+    """
+
+    stub:
+    """
+    printf 'binid\tprediction\n' > vambbins_RF_predictions.txt
+    printf '>stub_bin_seq\nACGT\n' > vamb_bins.1.fna
+    printf 'binid\tannotation\n' > vambbins_aggregated_annotation.txt
     """
 }
 
@@ -96,6 +110,18 @@ process VRHYME {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         vRhyme: \$(echo \$(vRhyme --version 2>&1) | sed 's/^.*vRhyme //')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    mkdir -p out_vrhyme
+    touch out_vrhyme/.gitkeep
+    printf '>stub_seq\nACGTACGT\n' > vRhyme_all.fasta
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        vRhyme: 1.1.0
     END_VERSIONS
     """
 }

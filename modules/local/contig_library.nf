@@ -39,6 +39,18 @@ process CONTIGLIB {
         samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
     END_VERSIONS
     """
+
+    stub:
+    """
+    printf '>stub_NODE_1_length_5000_cov_100\nACGTACGTACGTACGTACGTACGT\n' | gzip > contigs_cclib.fasta.gz
+    printf '>stub_NODE_1_length_5000_cov_100\nACGTACGTACGTACGTACGTACGT\n' | gzip > contigs_cclib_long.fasta.gz
+    printf '@SQ\tSN:stub_NODE_1_length_5000_cov_100\tLN:5000\n' > contigs_cclib_long.dict
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        bbmap: 38.92
+    END_VERSIONS
+    """
 }
 
 
@@ -71,6 +83,19 @@ process CONTIGLIB_CLUSTER {
         blast: \$(blastn -version 2>&1 | sed 's/^.*blastn: //; s/ .*\$//')
         seqkit: \$( seqkit | sed '3!d; s/Version: //' )
         samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    printf '>stub_NODE_1_length_5000_cov_100\nACGTACGTACGTACGTACGTACGT\n' > contigs_nrclib.fasta
+    printf '@SQ\tSN:stub_NODE_1_length_5000_cov_100\tLN:5000\n' > contigs_nrclib.dict
+    printf 'representative\tmember\n' > contigs_ANIclst.tsv
+    printf 'query\tsubject\tidentity\n' > contigs_ani.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        blast: 2.13.0
     END_VERSIONS
     """
 }

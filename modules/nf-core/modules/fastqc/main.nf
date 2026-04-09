@@ -44,4 +44,30 @@ process FASTQC {
         END_VERSIONS
         """
     }
+
+    stub:
+    def prefix = task.ext.prefix ?: "${meta.id}"
+    if (meta.single_end) {
+        """
+        touch ${prefix}_fastqc.html
+        touch ${prefix}_fastqc.zip
+
+        cat <<-END_VERSIONS > versions.yml
+        "${task.process}":
+            fastqc: 0.11.9
+        END_VERSIONS
+        """
+    } else {
+        """
+        touch ${prefix}_1_fastqc.html
+        touch ${prefix}_1_fastqc.zip
+        touch ${prefix}_2_fastqc.html
+        touch ${prefix}_2_fastqc.zip
+
+        cat <<-END_VERSIONS > versions.yml
+        "${task.process}":
+            fastqc: 0.11.9
+        END_VERSIONS
+        """
+    }
 }

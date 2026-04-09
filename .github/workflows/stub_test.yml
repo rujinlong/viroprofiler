@@ -1,0 +1,105 @@
+name: Stub pipeline test
+
+on:
+  push:
+    branches:
+      - main
+      - dev_ru
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  stub_viroprofiler:
+    name: Stub test - VIROPROFILER workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          version: ">=23.04.0"
+
+      - name: Resolve samplesheet paths
+        run: |
+          export STUB_R1_PATH="${{ github.workspace }}/tests/data/stub_R1.fastq.gz"
+          export STUB_R2_PATH="${{ github.workspace }}/tests/data/stub_R2.fastq.gz"
+          envsubst '$STUB_R1_PATH $STUB_R2_PATH' < tests/data/samplesheet_stub.csv > /tmp/samplesheet_stub.csv
+
+      - name: Run stub test
+        run: |
+          nextflow run main.nf \
+            -stub \
+            -profile test_stub \
+            --input /tmp/samplesheet_stub.csv \
+            --outdir output_stub \
+            -with-trace \
+            2>&1 | tee nextflow_stub.log
+
+      - name: Verify success
+        run: |
+          if grep -q "ERROR ~" nextflow_stub.log; then
+            echo "=== Errors found ==="
+            grep "ERROR ~" nextflow_stub.log
+            exit 1
+          fi
+          grep -q "Succeeded\|Pipeline completed successfully" nextflow_stub.log || \
+            { echo "Pipeline did not report success"; tail -20 nextflow_stub.log; exit 1; }
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stub-viroprofiler-logs
+          path: |
+            nextflow_stub.log
+            .nextflow.log
+            output_stub/pipeline_info/
+
+  stub_contiganno:
+    name: Stub test - CONTIGANNO workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          version: ">=23.04.0"
+
+      - name: Run stub test
+        run: |
+          nextflow run main.nf \
+            -stub \
+            -profile test_stub \
+            --input_contigs "${{ github.workspace }}/tests/data/stub_contigs.fasta" \
+            --outdir output_stub_contiganno \
+            2>&1 | tee nextflow_stub_contiganno.log
+
+      - name: Verify success
+        run: |
+          if grep -q "ERROR ~" nextflow_stub_contiganno.log; then
+            echo "=== Errors found ==="
+            grep "ERROR ~" nextflow_stub_contiganno.log
+            exit 1
+          fi
+          grep -q "Succeeded\|Pipeline completed successfully" nextflow_stub_contiganno.log || \
+            { echo "Pipeline did not report success"; tail -20 nextflow_stub_contiganno.log; exit 1; }
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stub-contiganno-logs
+          path: |
+            nextflow_stub_contiganno.log
+            .nextflow.log
+            output_stub_contiganno/pipeline_info/

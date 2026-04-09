@@ -65,7 +65,11 @@ def main(fin, fout_prefix, unclassified, dbsource):
     df = pd.read_csv(fin, sep="\t", names=cols)
 
     # Remove unclassified contigs
+    n_total = len(df)
     df = df[~df.lineage.isna()]
+    n_unclassified = n_total - len(df)
+    if n_unclassified > 0:
+        print(f"[parse_mmseqsTaxa] {n_unclassified}/{n_total} contigs have no taxonomy lineage and were excluded.", flush=True)
     
     # Format taxonomy ranks
     formatted_taxa = df.apply(lambda x: format_mmseqs_taxa(x, unclassified, col_lineage="lineage", dbsource=dbsource), axis=1)
@@ -76,7 +80,7 @@ def main(fin, fout_prefix, unclassified, dbsource):
 
     # save selected columns for merging with vConTACT2 clusters
     if dbsource == "ICTV":
-        df_sel = df_formatted[['contig_id', 'Realm', 'Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species', 'Strain']]
+        df_sel = df_formatted[['contig_id', 'Realm', 'Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']]
     elif dbsource == "NCBI":
         df_sel = df_formatted[['contig_id', 'Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']]
     df_sel.to_csv('{}.tsv'.format(fout_prefix), sep="\t", index=False)

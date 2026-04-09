@@ -27,6 +27,18 @@ process TAXONOMY_VCONTACT {
         vConTACT2: \$(grep "This is vConTACT2 " .command.out | sed 's/.* //g;s/=*//g')
     END_VERSIONS
     """
+
+    stub:
+    """
+    mkdir -p out_vContact2
+    printf 'Genome,VC Status,VC,Order,Family,Genus\n' > out_vContact2/genome_by_genome_overview.csv
+    touch out_vContact2/c1.ntw
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        vConTACT2: 0.9.22
+    END_VERSIONS
+    """
 }
 
 process TAXONOMY_MMSEQS {
@@ -58,6 +70,18 @@ process TAXONOMY_MMSEQS {
         MMseqs2: \$(grep "MMseqs Version" .command.log | head -n1 | sed 's/.*\t//g')
     END_VERSIONS
     """
+
+    stub:
+    """
+    printf 'contig_id\ttaxid\trank\tname\n' > mmseqsTaxaRst.tsv
+    touch mmseqsTaxaRst_report.txt
+    touch mmseqsTaxaRst_report.html
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        MMseqs2: 14.7564d
+    END_VERSIONS
+    """
 }
 
 process TAXONOMY_MERGE {
@@ -83,6 +107,17 @@ process TAXONOMY_MERGE {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         python: \$(python --version | sed 's/Python //g')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    printf 'contig_id\tOrder\tFamily\tGenus\tSpecies\n' > taxonomy.tsv
+    printf 'contig_id\ttaxid\tlineage\n' > taxa_mmseqs_formatted_all.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        python: 3.9.0
     END_VERSIONS
     """
 }

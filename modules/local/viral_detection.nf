@@ -32,13 +32,28 @@ process CHECKV {
         cat \$dir_new/proviruse_ids_raw.list >> proviruse_ids_raw.list
         cat \$dir_new/proviruse_ids_clean.list >> proviruse_ids_clean.list
         cp \$dir_new/proviruses_nextInput.fna .
-        sleep 1
     done
     seqkit seq -m $params.contig_minlen checkv_qc.fasta > checkv_qc_long.fasta
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         CheckV: \$(echo \$(checkv | head -n1 | sed 's/:.*//' | sed 's/CheckV v//'))
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    printf 'contig_id\tcheckv_quality\tcompleteness\n' > quality_summary.tsv
+    printf '>stub_NODE_1_length_5000_cov_100\nACGTACGTACGT\n' > checkv_qc_long.fasta
+    printf 'contig_id\tcheckv_quality\n' > quality_summary_proviruses.tsv
+    touch complete.list
+    touch hq.list
+    touch mq.list
+    touch lq.list
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        CheckV: 1.0.1
     END_VERSIONS
     """
 }
@@ -74,6 +89,21 @@ process VIRSORTER2 {
         VirSorter2: \$(grep 'VirSorter' .command.log | head -n1 | sed 's/.* //')
     END_VERSIONS
     """
+
+    stub:
+    """
+    printf '>stub_contig||full\nACGTACGTACGT\n' > final-viral-combined-for-dramv.fa
+    printf 'seqname\taffi\n' > viral-affi-contigs-for-dramv.tab
+    printf 'Contig,vs2_category\n' > vs2_category.csv
+    mkdir -p out_vs2
+    cp final-viral-combined-for-dramv.fa out_vs2/final-viral-combined.fa
+    printf 'seqname\tmax_score\tmax_score_group\n' > out_vs2/final-viral-score.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        VirSorter2: 2.2.4
+    END_VERSIONS
+    """
 }
 
 
@@ -102,6 +132,14 @@ process DVF {
     sed 1d dvf_virus.tsv | cut -f1 > virus_dvf.list
     seqkit grep -f virus_dvf.list $contigs > dvf.fasta
     """
+
+    stub:
+    """
+    printf 'name\tlen\tscore_dvfpred\tpvalue_flag\n' > contigs_dvfpred.txt
+    printf 'contig_id\tdvf_score\n' > dvf_virus.tsv
+    printf 'stub_NODE_1_length_5000_cov_100\n' > virus_dvf.list
+    printf '>stub_NODE_1_length_5000_cov_100\nACGTACGT\n' > dvf.fasta
+    """
 }
 
 process VIBRANT {
@@ -120,6 +158,14 @@ process VIBRANT {
     """
     ln -s $contigs contigs.fasta
     VIBRANT_run.py -i contigs.fasta -d $params.db/vibrant/databases -m $params.db/vibrant/files -t $task.cpus -virome
+    """
+
+    stub:
+    """
+    mkdir -p VIBRANT_contigs/VIBRANT_results_contigs
+    mkdir -p VIBRANT_contigs/VIBRANT_phages_contigs
+    printf 'contig\tquality\n' > VIBRANT_contigs/VIBRANT_results_contigs/VIBRANT_genome_quality_contigs.tsv
+    printf '>stub_phage\nACGTACGT\n' > VIBRANT_contigs/VIBRANT_phages_contigs/contigs.phages_combined.fna
     """
 }
 
@@ -145,5 +191,11 @@ process VIRCONTIGS_PRE {
     csvtk grep -t -r -f checkv_quality -p 'Complete|High-quality|Medium-quality|Low-quality' $checkv_quality | cut -f1 | sed 1d > checkv_vcontigs.list
     cat $dvflist checkv_vcontigs.list vibrant_vcontigs.list | sort -u > putative_vcontigs_pref1.list
     seqkit grep -f putative_vcontigs_pref1.list $nrclib > putative_vcontigs_pref1.fasta
+    """
+
+    stub:
+    """
+    printf '>stub_NODE_1_length_5000_cov_100\nACGTACGTACGT\n' > putative_vcontigs_pref1.fasta
+    printf 'stub_NODE_1_length_5000_cov_100\n' > putative_vcontigs_pref1.list
     """
 }

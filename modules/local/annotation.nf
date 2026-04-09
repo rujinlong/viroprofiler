@@ -29,6 +29,20 @@ process DRAMV {
         DRAM: 1.3
     END_VERSIONS
     """
+
+    stub:
+    """
+    mkdir -p dramv-annotate
+    mkdir -p dramv-distill
+    printf '>stub_gene\nMKVL\n' > dramv-annotate/genes.faa
+    printf '>stub_scaffold\nACGT\n' > dramv-annotate/scaffolds.fna
+    touch dramv-annotate/annotations.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        DRAM: 1.3.0
+    END_VERSIONS
+    """
 }
 
 
@@ -47,6 +61,11 @@ process MICOMPLETEDB{
     """
     hmmsearch --cpu $task.cpus -E 1.0e-05 -o out_miComplete --tblout hmmMiComplete.tbl ${params.db}/micomplete/Bact105.hmm $prot
     """
+
+    stub:
+    """
+    printf '# hmmsearch tblout stub\n' > hmmMiComplete.tbl
+    """
 }
 
 
@@ -64,6 +83,11 @@ process VOGDB{
 
     """
     hmmsearch --cpu $task.cpus -E 1.0e-05 -o out_vogdb --tblout hmmVOG.tbl ${params.db}/vogdb/AllVOG.hmm $prot
+    """
+
+    stub:
+    """
+    printf '# hmmsearch tblout stub\n' > hmmVOG.tbl
     """
 }
 
@@ -86,6 +110,16 @@ process EMAPPER {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         emapper: \$(echo \$(emapper.py -v) | grep version | cut -d' ' -f1 | sed 's/emapper-/v/g')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    printf 'query_name\tseed_ortholog\tevalue\tscore\n' > anno_eggnog.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        emapper: 2.1.9
     END_VERSIONS
     """
 }
@@ -144,6 +178,17 @@ process ABRICATE {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         abricate: \$(echo \$(abricate -v) | sed 's/^abricate  //' )
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    printf '#FILE\tSEQUENCE\tSTART\tEND\tSTRAND\tGENE\tCOVERAGE\tCOVERAGE_MAP\tGAPS\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n' > ARG_argannot.tsv
+    printf 'SEQUENCE\tSTART\tEND\tSTRAND\tGENE\tCOVERAGE\tCOVERAGE_MAP\tGAPS\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n' > anno_abricate.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        abricate: 1.0.1
     END_VERSIONS
     """
 }

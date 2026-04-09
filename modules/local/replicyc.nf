@@ -63,6 +63,18 @@ process BACPHLIP {
         bacphlip: 0.9.6
     END_VERSIONS
     """
+
+    stub:
+    def contig_base = contigs.baseName
+    """
+    printf 'Contig_name\tvirulent_score\ttemperate_score\n' > ${contig_base}.bacphlip
+    touch ${contig_base}.hmmsearch.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        bacphlip: 0.9.6
+    END_VERSIONS
+    """
 }
 
 
@@ -87,6 +99,16 @@ process REPLIDEC {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         Replidec: \$(Replidec --version | sed 's/Replidec //g')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    printf 'contig_id\treplication_type\n' > out_replidec.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        Replidec: 1.0.0
     END_VERSIONS
     """
 }
