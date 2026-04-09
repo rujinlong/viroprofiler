@@ -31,7 +31,6 @@ jobs:
             -stub \
             -profile test_stub \
             --outdir output_stub \
-            -with-trace \
             2>&1 | tee nextflow_stub.log
 
       - name: Verify success
