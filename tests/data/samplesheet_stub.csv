@@ -1,0 +1,2 @@
+sample,fastq_1,fastq_2
+stub_sample,$STUB_R1_PATH,$STUB_R2_PATH

@@ -1,8 +1,9 @@
 .nextflow*
 work
-data
+/data
 db
 output
+output_stub*
 results
 .DS_Store
 testing*
