@@ -1,4 +1,4 @@
-# Welcome to <u>ViroProfiler</u> pipeline documentation
+# Welcome to ViroProfiler pipeline documentation
 
 ## About
 
@@ -16,8 +16,8 @@ The pipeline's main steps are:
 | Gene function annotation | [DRAM-v](https://github.com/WrightonLabCSU/DRAM), [EggNOG](http://eggnog5.embl.de/) and [abricate](https://github.com/tseemann/abricate) |
 | Viral replication cycle prediction |  [BACPHLIP](https://github.com/adamhockenberry/bacphlip) or [Replidec](https://github.com/deng-lab/Replidec) |
 | Viral taxonomy annotation | [vConTACT2](https://bitbucket.org/MAVERICLab/vcontact2) and [MMseqs2 taxonomy](https://github.com/soedinglab/MMseqs2) |
-| Viral-host prediction | [iPhoP](https://bitbucket.org/srouxjgi/iphop) |
-| Results visualization | [MulqiQC](https://multiqc.info/), [R Markdown](https://rmarkdown.rstudio.com/) and [Shiny](https://shiny.rstudio.com/) |
+| Viral-host prediction | [iPHoP](https://bitbucket.org/srouxjgi/iphop) |
+| Results visualization | [MultiQC](https://multiqc.info/), [R Markdown](https://rmarkdown.rstudio.com/) and [Shiny](https://shiny.rstudio.com/) |
 
 !!! note "Tutorial"
 

@@ -17,7 +17,7 @@ If you need to run the pipeline using another executor such as sge, lsf, slurm, 
 
     If `-profile` is not specified, the pipeline will run locally and expect all software to be installed and available on the `PATH`. **This is not recommended** and will most likely fail.
 
-### Note on sigularity
+### Note on Singularity
 
 If you are using `singularity` and are persistently observing issues downloading Singularity images directly due to timeout or network issues, try downloading it first. Setting the [`NXF_SINGULARITY_CACHEDIR` or `singularity.cacheDir`](https://www.nextflow.io/docs/latest/singularity.html?#singularity-docker-hub) Nextflow options enables you to store and re-use the images from a central location for future pipeline runs.
 
@@ -56,3 +56,7 @@ If `-profile` is not specified, the pipeline will run locally and expect all sof
 - `test`
   - A profile with a complete configuration for automated testing
   - Includes links to test data so needs no other parameters
+- `test_stub`
+  - A lightweight profile for pipeline topology validation using Nextflow's `-stub` mode
+  - Runs all processes with stub blocks (no real computation or databases required)
+  - Used for CI testing on GitHub Actions

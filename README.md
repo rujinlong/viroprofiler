@@ -3,6 +3,7 @@
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A521.10.3-23aa62.svg)](https://www.nextflow.io/)
 [![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?logo=docker)](https://www.docker.com/)
 [![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg)](https://sylabs.io/docs/)
+[![CI](https://github.com/rujinlong/viroprofiler/actions/workflows/stub_test.yml/badge.svg)](https://github.com/rujinlong/viroprofiler/actions/workflows/stub_test.yml)
 [![DOI](https://zenodo.org/badge/537899739.svg)](https://zenodo.org/badge/latestdoi/537899739)
 
 ```
@@ -53,7 +54,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io), a workflow tool
 
    `-profile` specifies the container engine to use. You can use `singularity`, `charliecloud`, `docker`, `podman`, or `shifter`. You can also use `test` to run the pipeline with test data after setting up the database.
 
-5. Run the pipeline,
+5. Run the pipeline:
 
    ```bash
    # run test
@@ -63,13 +64,13 @@ The pipeline is built using [Nextflow](https://www.nextflow.io), a workflow tool
    nextflow run deng-lab/viroprofiler -r main -profile singularity --input samplesheet.csv
    ```
 
-6. Update the pipeline,
+6. Update the pipeline:
 
    ```bash
    nextflow pull deng-lab/viroprofiler
    ```
 
-   Please refer to the [tutorial](https://deng-lab.github.io/viroprofiler/tutorial) for more information on how to run the pipeline with customized parameters and options.
+Please refer to the [tutorial](https://deng-lab.github.io/viroprofiler/tutorial) for more information on running the pipeline with customized parameters and options.
 
 ## Documentation
 
@@ -83,7 +84,7 @@ For further information or help, please [open an issue](https://github.com/deng-
 
 ## Citations
 
-If you use  ViroProfiler for your analysis, please cite the publication as follows:
+If you use ViroProfiler for your analysis, please cite the publication as follows:
 
 > *Jinlong Ru, Mohammadali Khan Mirzaei, Jinling Xue, Xue Peng, Li Deng*. **ViroProfiler: a containerized bioinformatics pipeline for viral metagenomic data analysis**. *Gut Microbes* (2023); doi: https://doi.org/10.1080/19490976.2023.2192522
 

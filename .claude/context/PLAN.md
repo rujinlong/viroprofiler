@@ -43,16 +43,44 @@
 
 ## Session S-2026-04-09-002
 **Date:** 2026-04-09
-**Objective:** Docker CI 恢复、剩余改进项、commit & push
+**Objective:** Stub test CI infrastructure, documentation overhaul, code review
 
 ### Tasks
-- [ ] Re-enable Docker CI workflow (.github/workflows/docker.yml) — 取消注释全部 11 个镜像构建条目
+- [x] Create stub test data files (stub_R1/R2.fastq.gz, stub_SE.fastq.gz, stub_contigs.fasta, samplesheets) (2026-04-09)
+- [x] Fix config gaps: add single_end, dvf_maxlen params; update schema_ignore_params (2026-04-09)
+- [x] Fix .gitignore: `/data` anchor, add `output_stub*` (2026-04-09)
+- [x] Expand CI from 2 jobs to 5 jobs: PE, SE, CONTIGANNO, DB setup, optional modules (2026-04-09)
+- [x] Add stub blocks to all 12 setup_db.nf processes (100% stub coverage: 51/51) (2026-04-09)
+- [x] Fix ABRICATE stub printf %COVERAGE format specifier bug (2026-04-09)
+- [x] /simplify review #1: fix printf with %%COVERAGE escaping, remove -with-trace inconsistency (2026-04-09)
+- [x] Professional documentation overhaul — 12 files updated (2026-04-09)
+- [x] /simplify review #2: fix CI badge URL (rujinlong not deng-lab), remove orphan images, add trailing newline (2026-04-09)
+- [ ] Re-enable Docker CI workflow (.github/workflows/docker.yml)
 - [ ] Commit and push all fixes to dev_ru
-- [ ] LOGIC-001: 确认 contig_anno.nf 是否需要补全 RESULTS_TSE 调用（或更新文档说明其局限）
-- [ ] CONFIG-002: 审查 WorkflowMain.groovy / WorkflowViroprofiler.groovy 中被注释的参数验证逻辑，决定是否恢复
+- [ ] LOGIC-001: 确认 contig_anno.nf 是否需要补全 RESULTS_TSE 调用
+- [ ] CONFIG-002: 审查 WorkflowMain/WorkflowViroprofiler.groovy 参数验证逻辑
 - [ ] DOCKER-003: viroprofiler-virsorter2 Dockerfile 取消注释 micromamba clean 行
-- [ ] CI-002: 考虑添加 .github/workflows/lint.yml（nf-core lint + ruff check bin/）
+- [ ] CI-002: 考虑添加 .github/workflows/lint.yml
+- [ ] Enable GitHub Actions on rujinlong/viroprofiler fork (manual step)
 - [ ] Run test profile to validate pipeline
+
+### Blockers
+- GitHub Actions must be manually enabled on the fork before CI can run
+
+---
+
+## Session S-2026-04-10-001
+**Date:** 2026-04-10
+**Objective:** Commit, push, enable CI, validate all 5 stub test jobs on GitHub Actions
+
+### Tasks
+- [ ] Commit all changes to dev_ru (stub tests + documentation overhaul)
+- [ ] Enable GitHub Actions on rujinlong/viroprofiler fork (manual: github.com/rujinlong/viroprofiler/actions)
+- [ ] Push dev_ru and verify all 5 CI jobs pass
+- [ ] Re-enable Docker CI workflow (.github/workflows/docker.yml)
+- [ ] LOGIC-001: 确认 contig_anno.nf 是否需要补全 RESULTS_TSE 调用
+- [ ] CONFIG-002: 审查 WorkflowMain/WorkflowViroprofiler.groovy 参数验证逻辑
+- [ ] DOCKER-003: viroprofiler-virsorter2 Dockerfile 取消注释 micromamba clean 行
 
 ### Blockers
 - None

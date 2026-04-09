@@ -33,8 +33,6 @@ output
 └── virsorter2
 ```
 
-<!-- TODO nf-core: Add a brief overview of what the output is and how it is generated -->
-
 ## Pipeline overview
 
 The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes data using the following steps:
@@ -67,13 +65,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 
 [FastQC](http://www.bioinformatics.babraham.ac.uk/projects/fastqc/) gives general quality metrics about your sequenced reads. It provides information about the quality score distribution across your reads, per base sequence content (%A/T/G/C), adapter contamination and overrepresented sequences. For further reading and documentation see the [FastQC help pages](http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/).
 
-![MultiQC - FastQC sequence counts plot](images/mqc_fastqc_counts.png)
-
-![MultiQC - FastQC mean quality scores plot](images/mqc_fastqc_quality.png)
-
-![MultiQC - FastQC adapter content plot](images/mqc_fastqc_adapter.png)
-
-> **NB:** The FastQC plots displayed in the MultiQC report shows _untrimmed_ reads. They may contain adapter sequence and potentially regions with low quality.
+> **Note:** The FastQC plots displayed in the MultiQC report show _untrimmed_ reads. They may contain adapter sequence and potentially regions with low quality.
 
 ### Dereplication of contigs
 
@@ -89,35 +81,35 @@ The long contig library were then dereplicated using MGV clustering script (http
 
 ### Binning (optional, using Phamb or vrhyme)
 
-The representative contigs of each cluster were can be binned into different bins using Phamb or vrhyme.
+The representative contigs of each cluster can be binned into viral MAGs using [phamb](https://github.com/RasmussenLab/phamb) or [vRhyme](https://github.com/AnantharamanLab/vRhyme).
 
 ### Abundance estimation
 
-Abundance of contigs or bins were estimated using the clean reads mapped to the contigs or bins. There are multiple abundance metrics available, including raw counts, TPM, and RPKM. In addition, the mapped BAM files can be imported into other tools such as MetaPop (https://github.com/metaGmetapop/metapop) for macro- and micro-diversity analyses of viruses and visualization of metagenomic-derived populations.
+Abundance of contigs or bins is estimated using clean reads mapped to the contigs or bins. Multiple abundance metrics are available, including raw counts, TPM, and RPKM. The mapped BAM files can also be imported into other tools such as [MetaPop](https://github.com/metaGmetapop/metapop) for macro- and micro-diversity analyses of viruses and visualization of metagenomic-derived populations.
 
 ### Viral sequence identification
 
-Viral sequences were identified using multiple tools in ViroProfiler. Results of each tools were saved to separate files, and be merged into a final annotation file in the end.
+Viral sequences are identified using multiple tools in ViroProfiler (VirSorter2, VIBRANT, DeepVirFinder). Results from each tool are saved to separate files and merged into a final annotation file.
 
 ### Functional annotation
 
-This step is to annotate protein sequences of viruses using multiple tools and databases. Results of each tools were saved to separate files, and be merged into a final annotation file in the end.
+Protein sequences of viruses are annotated using multiple tools and databases (DRAM-v, eggNOG-mapper, abricate). Results from each tool are saved to separate files and merged into a final annotation file.
 
 ### Taxonomy assignment
 
-This step is to assign taxonomy to the contigs or bins using MMseqs2 taxonomy module. Contigs were also clustered into a roughly genus level using vConTACT2. vConTACT2 can also be used to assign taxonomy to viral contigs or bins. However, we found at most time vConTACT2 can only assign taxonomy to a few contigs or bins. Therefore, we use MMseqs2 taxonomy module with a customized viral database to assign taxonomy to all contigs or bins. The customized viral database was built using the viral sequences from NCBI RefSeq database, which is the same database used by vConTACT2. In addition, we also support the new ICTV viral taxonomy nomonclature by creating a separate database using the viral sequences and taxonomy annotations from ICTV database. The results were saved to the `taxonomy` folder.
+Taxonomy is assigned to contigs or bins using the MMseqs2 taxonomy module with a customized viral database built from NCBI RefSeq viral sequences. Contigs are also clustered at roughly genus level using vConTACT2. While vConTACT2 can assign taxonomy, it typically covers only a small fraction of contigs; therefore, MMseqs2 serves as the primary taxonomy assignment tool. ViroProfiler also supports the ICTV viral taxonomy nomenclature via a separate database built from ICTV sequences and annotations. Results are saved to the `taxonomy` folder.
 
 ### Viral-host prediction
 
-This step is to predict the host of the viral contigs or bins using iPHoP, which is a new tool that combined signals and results of multiple viral-host prediction tools. The results were saved to the `viralhost` folder.
+Viral host prediction is performed using [iPHoP](https://bitbucket.org/srouxjgi/iphop), which integrates signals from multiple viral-host prediction tools. Results are saved to the `viralhost` folder.
 
 ### Viral replication cycle prediction
 
-This step is to predict the replication cycle of the viral contigs or bins using either Bacphlip or Replicyc. The results were merged into the final annotation file.
+The replication cycle of viral contigs or bins is predicted using either [BACPHLIP](https://github.com/adamhockenberry/bacphlip) or [Replidec](https://github.com/deng-lab/Replidec). Results are merged into the final annotation file.
 
 ### Merged output
 
-All contig annotation results and abundance table were merged into a TreeSummarizedExperiment object, which can be imported into R, or uploaded to ViroProfiler-viewer for further annalysis, such as diversity annalysis and differential abundance analysis.
+All contig annotation results and the abundance table are merged into a [TreeSummarizedExperiment](https://bioconductor.org/packages/TreeSummarizedExperiment/) R object (`viroprofiler_output.rds`). This object can be imported into R for custom analysis or uploaded to [ViroProfiler-viewer](https://github.com/deng-lab/viroprofiler-viewer) for interactive exploration, including diversity analysis and differential abundance analysis.
 
 ### MultiQC
 

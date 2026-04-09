@@ -11,8 +11,7 @@ wget -O example_custom.config "https://raw.githubusercontent.com/deng-lab/viropr
 nextflow run deng-lab/viroprofiler -c example_custom.config
 ```
 
-Default configuration
----------------------
+## Default configuration
 
 ```groovy
 profiles {

@@ -144,20 +144,24 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 | <div style="width:100px">Parameter</div> | Required | Default | Description |
 | :--------------------------------------- | :------- | :------ | :---------- |
 | `--input`  | :material-check: | NA       | Input samplesheet describing all the samples to be analysed |
-| `--output` | :material-check: | output  |  Name of directory to store output values |
+| `--outdir` | :material-check: | output  | Name of directory to store output values |
 | `--db` | :material-check: | ${HOME}/viroprofiler | Path containing required ViroProfiler databases |
+| `--mode` | :material-close: | all | Run mode: `setup`, `fastqc`, `fastp`, `contiglib`, or `all` |
+| `--input_contigs` | :material-close: | false | Path to pre-assembled contigs (skips assembly) |
+| `--single_end` | :material-close: | false | Set to `true` for single-end reads |
+| `--reads_type` | :material-close: | raw | Input reads type: `raw` or `clean` (skip trimming) |
 
 ##### On/Off processes
 
 | <div style="width:180px">Parameter</div> | Required | Default | Description |
 | :--------------------------------------- | :------- | :------ | :---------- |
-| `--use_dram` | :material-close: | false | Use DRAM or not |
-| `--use_abricate` | :material-close: | false | Use abricate or not |
-| `--use_decontam` | :material-close: | false | Remove host contamination from reads or not |
-| `--use_eggnog` | :material-close: | false | Use eggnog-mapper to annotate proteins or not |
-| `--use_iphop` | :material-close: | false | Use iPhOP to predict host or not |
-| `--use_kraken2` | :material-close: | false | Use kraken2 to classify reads or not |
-| `--use_phamb` | :material-close: | false | Use phamb to bin contigs or not |
+| `--use_dram` | :material-close: | true | Use DRAM-v for functional annotation |
+| `--use_iphop` | :material-close: | true | Use iPHoP for viral-host prediction |
+| `--use_abricate` | :material-close: | false | Use abricate for AMR gene detection |
+| `--use_decontam` | :material-close: | false | Remove host contamination from reads |
+| `--use_eggnog` | :material-close: | false | Use eggNOG-mapper for protein annotation |
+| `--use_kraken2` | :material-close: | false | Use Kraken2 for read classification |
+| `--use_phamb` | :material-close: | false | Use phamb for contig binning |
 
 
 ##### Other parameters
@@ -166,9 +170,9 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 | :--------------------------------------- | :------- | :------ | :---------- |
 | `--prot_cluster_min_similarity` | :material-close: | 0.7 | Minimum similarity of protein seqs in the same cluster |
 | `--prot_cluster_min_coverage` | :material-close: | 0.9 | Minimum similarity of protein seqs in the same cluster |
-| `--binning` | :material-close: | null | Which binning tool to use, `vRhyme`, `phamb` or `false` |
-| `--binning_minlen_contig` | :material-close: | 2000 | Congits shorter than this value will not be used for binning |
-| `--binning_minlen_bin` | :material-close: | 2000 | Bin size shorter than this value will be removed from down-stream analyses |
+| `--binning` | :material-close: | false | Which binning tool to use: `vrhyme`, `phamb`, or `false` |
+| `--binning_minlen_contig` | :material-close: | 2000 | Contigs shorter than this value will not be used for binning |
+| `--binning_minlen_bin` | :material-close: | 2000 | Bins shorter than this value will be removed from downstream analyses |
 | `--dvf_qvalue` | :material-close: | 0.1 | q-value used in `DeepVirFinder` |
 | `--virsorter2_groups` | :material-close: | "dsDNAphage" | Viral category detected by `VirSorter2`, could be any combination of `dsDNAphage,NCLDV,RNA,ssDNA,lavidaviridae` |
 | `--contig_minlen_vcontact2` | :material-close: | 10000 | Contigs/Bins short than this value will not be used in `vConTACT2` |

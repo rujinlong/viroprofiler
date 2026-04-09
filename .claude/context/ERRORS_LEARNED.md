@@ -3,6 +3,16 @@
 <!-- Format: EL-NNN, Date, Context, Error/Symptom, Root Cause, Fix, Prevention Rule, Tag, Reusability -->
 <!-- Newest entries at top -->
 
+## EL-010
+**Date:** 2026-04-09
+**Context:** ABRICATE stub block in annotation.nf — printf with `%COVERAGE` column header
+**Error/Symptom:** `.command.sh: line 3: printf: 'C': invalid format character` — stub test fails with exit code 1
+**Root Cause:** `printf '%COVERAGE'` treats `%C` as a printf format specifier. Similarly `%IDENTITY` treats `%I` as a format specifier.
+**Fix:** Use `printf '%%COVERAGE\t%%IDENTITY\n'` (double `%%` escapes the percent sign in printf), or use `echo` (but note `echo` without `-e` outputs literal `\t` strings, not real tabs).
+**Prevention Rule:** When using `printf` in shell scripts with data containing `%` characters (common in bioinformatics column headers like %COVERAGE, %IDENTITY, %GC), always escape as `%%` or use `printf '%s\n' "$string"` format.
+**Tag:** shell, printf, stub, bioinformatics
+**Reusability:** high
+
 ## EL-009
 **Date:** 2026-04-09
 **Context:** Dockerfile viroprofiler-geneannot — COPY + dynamic path
