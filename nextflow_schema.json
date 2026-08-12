@@ -40,6 +40,12 @@
                     "default": "~/.nextflow/assets/deng-lab/viroprofiler/db",
                     "fa_icon": "fas fa-database"
                 },
+                "container_binds": {
+                    "type": "string",
+                    "description": "Extra host paths to bind into every container, comma-separated.",
+                    "help_text": "Needed when entries under --db are symlinks that point outside it, for example a shared read-only database tree.",
+                    "fa_icon": "fas fa-link"
+                },
                 "outdir": {
                     "type": "string",
                     "format": "directory-path",

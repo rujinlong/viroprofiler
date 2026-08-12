@@ -173,6 +173,14 @@ process DB_VREFSEQ {
         wget -O ${params.db}/taxonomy/mmseqs_vrefseq.tar.gz "https://zenodo.org/record/7044674/files/mmseqs_vrefseq.tar.gz"
         tar -zxvf ${params.db}/taxonomy/mmseqs_vrefseq.tar.gz -C ${params.db}/taxonomy
         rm ${params.db}/taxonomy/mmseqs_vrefseq.tar.gz
+        # The published archive stores its members with mode 040, so the owner cannot read
+        # them and `mmseqs createdb` fails with "Permission denied". Use `find -exec`:
+        # `chmod -R` is silently a no-op on filesystems that apply a default ACL.
+        find ${params.db}/taxonomy/mmseqs_vrefseq -type d -exec chmod u+rwx {} +
+        find ${params.db}/taxonomy/mmseqs_vrefseq -type f -exec chmod u+rw {} +
+        test -r ${params.db}/taxonomy/mmseqs_vrefseq/refseq_viral.faa \\
+            || { echo "refseq_viral.faa is still unreadable after unpacking" >&2; exit 1; }
+
         cd ${params.db}/taxonomy/mmseqs_vrefseq
         mmseqs createdb refseq_viral.faa refseq_viral
         mmseqs createtaxdb refseq_viral tmp --ncbi-tax-dump ../taxdump --tax-mapping-file virus.accession2taxid --threads $task.cpus
