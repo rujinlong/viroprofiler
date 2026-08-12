@@ -16,17 +16,18 @@ process DRAMV {
     task.ext.when == null || task.ext.when
 
     """
-    # Due to limitation of container, DRAM database path is hardset to /opt/conda/db2
-    # So we need to create a soft link for the database path
-    ln -s ${params.db} /opt/conda/db2
+    # DRAM takes every database location from its CONFIG, which DB_DRAM wrote with the
+    # absolute paths under --db. That directory is bind-mounted into the container at the
+    # same path, so pointing DRAM at the CONFIG is all that is needed and nothing has to
+    # be written inside the image.
     export DRAM_CONFIG_LOCATION=${params.db}/dram/CONFIG
-    
+
     DRAM-v.py annotate -i $contigs -v $AFFI -o dramv-annotate --threads $task.cpus --min_contig_size $params.contig_minlen
     DRAM-v.py distill -i dramv-annotate/annotations.tsv -o dramv-distill
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        DRAM: 1.3
+        DRAM: \$(python -c 'from mag_annotator import __version__; print(__version__)')
     END_VERSIONS
     """
 
@@ -40,7 +41,7 @@ process DRAMV {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        DRAM: 1.3.0
+        DRAM: 1.4.6
     END_VERSIONS
     """
 }

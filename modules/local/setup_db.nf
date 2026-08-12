@@ -102,8 +102,14 @@ process DB_DRAM {
     script:
     """
     if [ ! -d ${params.db}/dram ]; then
-        # Create DRAM database CONFIG file
-        create_dram_config.py -d ${params.db}/dram
+        mkdir -p ${params.db}/dram
+        # `prepare_databases` writes the CONFIG itself, filling in the absolute path of
+        # every database as it is downloaded, but it can only read a CONFIG that already
+        # exists. So export the empty template that ships inside mag_annotator (with
+        # DRAM_CONFIG_LOCATION unset, otherwise `export_config` reads the file it is
+        # supposed to create) and point DRAM at that copy for the actual build.
+        unset DRAM_CONFIG_LOCATION
+        DRAM-setup.py export_config --output_file ${params.db}/dram/CONFIG
         export DRAM_CONFIG_LOCATION=${params.db}/dram/CONFIG
         DRAM-setup.py prepare_databases --output_dir ${params.db}/dram --threads $task.cpus --skip_uniref
     else
@@ -128,9 +134,29 @@ process DB_VIBRANT {
     script:
     """
     if [ ! -d ${params.db}/vibrant ]; then
-        mkdir -p ${params.db}/vibrant
+        # `download-db.sh` ends with an unconditional `exit 0` and prints "databases are
+        # downloaded successfully" even when VIBRANT_setup.py died, so its exit status
+        # proves nothing. Build into the task work directory, verify the result, and only
+        # then publish -- otherwise a 4 MB shell of a database gets left behind and the
+        # directory-existence guard above makes that state permanent.
+        mkdir -p vibrant_db
         export VIBRANT_DATA_PATH="/opt/conda/share/vibrant-1.2.1/db"
-        download-db.sh ${params.db}/vibrant
+        download-db.sh \$(pwd)/vibrant_db
+        find vibrant_db -type d -exec chmod u+rwx {} +
+        find vibrant_db -type f -exec chmod u+rw {} +
+
+        # VIBRANT_setup.py downloads VOG, Pfam and KEGG profiles and runs `hmmpress` on
+        # each; the pressed databases are ~11 GB in total. Check for the binary index of
+        # all three rather than trusting the exit status.
+        for hmm in VOGDB94_phage KEGG_profiles_prokaryotes Pfam-A_v32; do
+            test -s "vibrant_db/databases/\${hmm}.HMM.h3i" || {
+                echo "VIBRANT database build failed: vibrant_db/databases/\${hmm}.HMM.h3i is missing or empty." >&2
+                echo "See vibrant_db/databases/VIBRANT_setup.log for the underlying error." >&2
+                exit 1
+            }
+        done
+
+        mv vibrant_db ${params.db}/vibrant
     else
         echo "VIBRANT database already exists"
     fi
@@ -170,22 +196,29 @@ process DB_VREFSEQ {
     fi
 
     if [ ! -d ${params.db}/taxonomy/mmseqs_vrefseq ]; then
-        wget -O ${params.db}/taxonomy/mmseqs_vrefseq.tar.gz "https://zenodo.org/record/7044674/files/mmseqs_vrefseq.tar.gz"
-        tar -zxvf ${params.db}/taxonomy/mmseqs_vrefseq.tar.gz -C ${params.db}/taxonomy
-        rm ${params.db}/taxonomy/mmseqs_vrefseq.tar.gz
+        # Build in the task work directory, not in place. mmseqs writes its index with
+        # access patterns that fail on NFS ("Can not open result file ..."), and building
+        # elsewhere also means an interrupted run cannot leave a half-built database behind
+        # for the directory-existence guard above to mistake for a complete one.
+        wget -O mmseqs_vrefseq.tar.gz "https://zenodo.org/record/7044674/files/mmseqs_vrefseq.tar.gz"
+        tar -zxf mmseqs_vrefseq.tar.gz
+        rm mmseqs_vrefseq.tar.gz
         # The published archive stores its members with mode 040, so the owner cannot read
         # them and `mmseqs createdb` fails with "Permission denied". Use `find -exec`:
         # `chmod -R` is silently a no-op on filesystems that apply a default ACL.
-        find ${params.db}/taxonomy/mmseqs_vrefseq -type d -exec chmod u+rwx {} +
-        find ${params.db}/taxonomy/mmseqs_vrefseq -type f -exec chmod u+rw {} +
-        test -r ${params.db}/taxonomy/mmseqs_vrefseq/refseq_viral.faa \\
+        find mmseqs_vrefseq -type d -exec chmod u+rwx {} +
+        find mmseqs_vrefseq -type f -exec chmod u+rw {} +
+        test -r mmseqs_vrefseq/refseq_viral.faa \\
             || { echo "refseq_viral.faa is still unreadable after unpacking" >&2; exit 1; }
 
-        cd ${params.db}/taxonomy/mmseqs_vrefseq
+        cd mmseqs_vrefseq
         mmseqs createdb refseq_viral.faa refseq_viral
-        mmseqs createtaxdb refseq_viral tmp --ncbi-tax-dump ../taxdump --tax-mapping-file virus.accession2taxid --threads $task.cpus
+        mmseqs createtaxdb refseq_viral tmp --ncbi-tax-dump ${params.db}/taxonomy/taxdump --tax-mapping-file virus.accession2taxid --threads $task.cpus
         mmseqs createindex refseq_viral tmp --threads $task.cpus
         rm -rf tmp
+        cd ..
+
+        mv mmseqs_vrefseq ${params.db}/taxonomy/
     else
         echo "vRefSeq database already exists"
     fi

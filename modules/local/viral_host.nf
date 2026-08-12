@@ -26,9 +26,12 @@ process VIRALHOST_IPHOP {
 
     iphop predict --fa_file $contigs --out_dir out_iphop --db_dir \$iphop_db --num_threads $task.cpus
 
+    # iPHoP has no --version flag (neither the argparse CLI up to 1.4.1 nor the
+    # Typer one in 2.x), so `iphop --version` exits 2 and prints nothing to
+    # stdout; read the installed package version instead.
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        iPHoP: \$(iphop --version | head -n1 | sed 's/iPHoP v//;s/: .*//')
+        iPHoP: \$(python -c 'import iphop; print(iphop.__version__)')
         seqkit: \$( seqkit | sed '3!d; s/Version: //' )
     END_VERSIONS
     """

@@ -85,7 +85,7 @@ INPUT_CHECK (samplesheet CSV)
 
 ### Helper Scripts
 
-`bin/` contains 22 Python/R/shell scripts called by processes (e.g., `run_checkv.sh`, `create_dram_config.py`, `parse_mmseqsTaxa.py`, `create_tse.r`).
+`bin/` contains 19 Python/R/shell scripts called by processes (e.g., `run_checkv.sh`, `parse_mmseqsTaxa.py`, `create_tse.r`).
 
 ### Groovy Libraries
 

@@ -1,9 +1,20 @@
+# NOT USED BY THE BUILD — kept only as a readable record of what this image adds
+# on top of the iPHoP fork's own `iphop_environment.yml`. The Dockerfile passes
+# these three specs to micromamba directly, because micromamba refuses more than
+# one YAML environment file per invocation ("Can only handle 1 yaml file!").
+#
+#   typer      - the fork's CLI imports it; taken from conda-forge so it is
+#                present before `pip install` has to resolve it
+#   seqkit     - VIRALHOST_IPHOP reports its version in versions.yml
+#   procps-ng  - `ps`, used by nextflow to collect per-task resource metrics
+#
+# Everything else (blast, hmmer, prodigal, diamond, perl-bioperl, r-base,
+# r-ranger, python 3.8, ...) comes from iphop_environment.yml in the fork.
 name: viroprofiler-host
 channels:
   - conda-forge
   - bioconda
 dependencies:
-  - conda-forge::procps-ng=4.0.0
-  - blast
-  - seqkit
-  - iphop
+  - conda-forge::typer
+  - conda-forge::procps-ng
+  - bioconda::seqkit

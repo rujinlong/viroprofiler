@@ -11,11 +11,12 @@ ENV PATH=/opt/conda/bin:/opt/conda/envs/viroprofiler-emapper/bin:/opt/conda/envs
 
 COPY ./docker/viroprofiler-geneannot/env_*.yml /tmp
 
-# install DRAM to `base` env
+# Install DRAM's dependencies into the `base` env, then DRAM itself from PyPI.
+# DRAM is not taken from bioconda because its 1.4.6 packages cannot be solved on
+# linux-aarch64; see the comments in env_dram.yml. bioconda builds that package from the
+# very same `DRAM-bio` sdist, so this installs identical code.
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba install -n base -f /tmp/env_dram.yml -y
-COPY ./docker/viroprofiler-geneannot/database_handler.py /tmp/database_handler.py
-RUN SITE_PKGS=$(python3 -c "import site; print(site.getsitepackages()[0])") && \
-    cp /tmp/database_handler.py $SITE_PKGS/mag_annotator/
+RUN pip install --no-cache-dir --no-deps DRAM-bio==1.4.6
 
 # Install emapper to `viroprofiler_emapper` env
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba create -f /tmp/env_emapper.yml -y

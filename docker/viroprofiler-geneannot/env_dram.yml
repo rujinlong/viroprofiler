@@ -4,12 +4,26 @@ channels:
   - bioconda
 dependencies:
   - conda-forge::procps-ng=4.0.0
+  # DRAM itself is NOT installed from bioconda here; it is pip-installed in the
+  # Dockerfile. Every bioconda build of `dram 1.4.6` constrains scikit-bio to <0.6, and
+  # conda-forge publishes no scikit-bio below 0.6.0 for linux-aarch64, so the conda solve
+  # is unsatisfiable on arm64. The bioconda package is built from the same PyPI sdist
+  # (`DRAM-bio`), so pip gives the identical code with a solvable dependency set. The run
+  # dependencies the bioconda recipe would have pulled in are listed explicitly below.
   - python=3.10
-  # pkg_resources, which DRAM's mag_annotator imports, was dropped in setuptools 81.
+  # mag_annotator/database_handler.py still does `from pkg_resources import
+  # resource_filename`; setuptools 81 removed pkg_resources.
   - setuptools<81
-  - pandas
+  - pip
+  # DRAM 1.4.6 requires pandas <2: mag_annotator still calls the Series.iteritems()
+  # method that pandas 2.0 removed.
+  - pandas>=1.5,<2
+  - numpy<2
+  # DRAM asks for scikit-bio <0.6, which has no linux-aarch64 build at all. 0.6.x is the
+  # closest available and still provides every skbio API DRAM imports.
+  - scikit-bio<0.7
+  - scipy>=1.9
   - pytest
-  - scikit-bio
   - prodigal
   - mmseqs2=17.b804f
   - hmmer!=3.3.1
@@ -21,6 +35,6 @@ dependencies:
   - networkx
   - ruby
   - parallel
-  - dram
+  - curl
+  - wget
   - click
-  - scipy
