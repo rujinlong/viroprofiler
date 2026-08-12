@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Language Policy (MANDATORY)
+
+**Everything written into this repository must be in English.** ViroProfiler's users are
+predominantly English-speaking, so English is the only language allowed in:
+
+- source code, comments, and log/error messages
+- commit messages, branch names, PR/issue text
+- `README.md`, `docs/`, `CHANGELOG.md`, and every other tracked document
+- test fixtures, sample sheets, and CI workflow definitions
+
+This applies regardless of the language used in the interactive conversation with the user,
+and it also applies to any subagent invoked while working on this repository.
+
 ## What is ViroProfiler
 
 A Nextflow DSL2 pipeline for viral metagenomic data analysis. It takes raw reads (or pre-assembled contigs), performs QC, assembly, viral detection, taxonomy, host prediction, functional annotation, and produces a TreeSummarizedExperiment (TSE) R object.
