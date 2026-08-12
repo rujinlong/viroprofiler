@@ -24,4 +24,5 @@ dependencies:
     - seqkit
     - click
     - snakemake
+    - wget
     - phamb

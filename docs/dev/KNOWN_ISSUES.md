@@ -9,20 +9,26 @@ usability defect · **P3** hygiene.
 
 | ID | Severity | Area | Status |
 |----|----------|------|--------|
-| [I-01](#i-01) | P0 | Containers — amd64-only images | Open |
-| [I-02](#i-02) | P0 | Containers — `viroprofiler-viewer` has no Dockerfile | Open |
-| [I-03](#i-03) | P0 | Config — `params.db` never bind-mounted into containers | Open |
-| [I-04](#i-04) | P1 | Test data — stub samplesheet uses launch-dir-relative paths | Open |
-| [I-05](#i-05) | P1 | Config — `params.tracedir` frozen to the default `outdir` | Open |
+| [I-01](#i-01) | P0 | Containers — amd64-only images | Partly fixed — arm64 images build from `docker/`, except iPHoP and DVF |
+| [I-02](#i-02) | P0 | Containers — `viroprofiler-viewer` has no Dockerfile | Fixed |
+| [I-03](#i-03) | P0 | Config — `params.db` never bind-mounted into containers | Fixed |
+| [I-04](#i-04) | P1 | Test data — stub samplesheet uses launch-dir-relative paths | Fixed |
+| [I-05](#i-05) | P1 | Config — `params.tracedir` frozen to the default `outdir` | Fixed |
 | [I-06](#i-06) | P1 | Databases — iPHoP DB directory name hardcoded and stale | Open |
 | [I-07](#i-07) | P1 | Databases — Bracken/Kraken2 DB paths disagree | Open |
 | [I-08](#i-08) | P2 | Databases — NCBI taxonomy pinned to a 2022 archive snapshot | Open |
 | [I-09](#i-09) | P2 | Databases — VOGDB host renamed; plain-HTTP URL | Open |
 | [I-10](#i-10) | P2 | Databases — setup steps are not resumable and never verified | Open |
 | [I-11](#i-11) | P2 | Workflow — `--mode fastqc` / `fastp` / `contiglib` not honoured | Open |
-| [I-12](#i-12) | P2 | Config — `docker.userEmulation` removed in modern Nextflow | Open |
+| [I-12](#i-12) | P2 | Config — `docker.userEmulation` removed in modern Nextflow | Fixed |
 | [I-13](#i-13) | P3 | Repo — stub output directories committed despite `.gitignore` | Open |
 | [I-14](#i-14) | P3 | Docs — `CLAUDE.md` references an MCP server that is not part of the repo | Open |
+| [I-15](#i-15) | P1 | Config — `contamref_idx` ignores `--db` and nothing ever creates it | Open |
+| [I-16](#i-16) | P1 | Config — `modules.config` loaded after `profiles`, so containers were unoverridable | Fixed |
+| [I-17](#i-17) | P2 | Containers — Dockerfiles call `wget` that is only present transitively | Fixed |
+| [I-18](#i-18) | P2 | Containers — DeepVirFinder bundled into the binning image | Fixed |
+| [I-19](#i-19) | P2 | Modules — vendored nf-core modules and their containers are from 2022 | Open |
+| [I-20](#i-20) | P3 | Assets — `samplesheet_contigs.csv` contains a literal `${HOME}` | Open |
 
 ---
 
@@ -229,3 +235,75 @@ They are run artefacts, not fixtures, and they inflate every clone.
 using Grep/Glob/Read". That server is a local, personal setup; it is not configured in this
 repository and is unavailable in a clean checkout, so the instruction misfires for every
 other contributor.
+
+<a id="i-15"></a>
+## I-15 — `contamref_idx` ignores `--db` and nothing ever creates it (P1)
+
+`nextflow.config` defaults `contamref_idx = "${HOME}/viroprofiler/contamination_refs/hg19/ref"`.
+Two problems:
+
+1. The path is anchored to `$HOME`, not to `params.db`, so moving the databases with `--db`
+   leaves the decontamination reference behind.
+2. No process in `modules/local/setup_db.nf` builds a `contamination_refs` index, and
+   `--mode setup` never mentions it. `--use_decontam true` therefore fails on a clean
+   installation with a bare Nextflow file-not-found:
+
+```
+ERROR ~ No such file or directory: /home/<user>/viroprofiler/contamination_refs/hg19/ref
+```
+
+The default should follow `params.db`, resolved lazily, and either a setup process should
+build the index or the failure should carry an actionable message.
+
+<a id="i-16"></a>
+## I-16 — `conf/modules.config` was loaded after `profiles` (P1)
+
+`includeConfig 'conf/modules.config'` sat at the bottom of `nextflow.config`, after the
+`profiles` block. In Nextflow the later include wins, so the container assignments in
+`modules.config` overrode anything a profile set. No profile could redirect the pipeline to
+a different registry, a local mirror, or a locally built image — an offline or
+air-gapped cluster had no supported way to substitute images.
+
+Moving the include above `profiles` makes profile overrides possible; `conf/arm64_local.config`
+relies on it.
+
+<a id="i-17"></a>
+## I-17 — Dockerfiles call `wget` that was only present transitively (P2)
+
+`docker/viroprofiler-taxa/Dockerfile` and `docker/viroprofiler-binning/Dockerfile` download
+reference data with `wget`, but neither `env_taxa.yml` nor `env_binning.yml` listed it — the
+binary arrived as an incidental dependency of a pinned package. As soon as the solve
+changes, the build fails late with `wget: command not found` (exit 127) after the multi-GB
+conda step. `wget` is now declared explicitly.
+
+<a id="i-18"></a>
+## I-18 — DeepVirFinder was bundled into the binning image (P2)
+
+`docker/viroprofiler-binning/Dockerfile` created a second conda environment from
+`env_dvf.yml`, which pins `theano=1.0.3` and `keras=2.2.4` — both frozen to 2018, and
+`theano` has no `linux-aarch64` build at all. One unmaintained tool therefore made the whole
+binning image (metabat2, vRhyme, phamb) unbuildable on arm64.
+
+DeepVirFinder now lives in `docker/viroprofiler-dvf/`, and the `DVF` process carries its own
+`viroprofiler_dvf` label. This changes nothing for amd64 users beyond one extra image.
+
+<a id="i-19"></a>
+## I-19 — Vendored nf-core modules and their containers are from 2022 (P2)
+
+`modules/nf-core/modules/` pins FastQC 0.11.9, fastp 0.23.2, SPAdes 3.15.4 and MultiQC 1.12
+against `quay.io/biocontainers`, which publishes amd64 only. They also use the pre-nf-core-3
+`conda (params.enable_conda ? ... : null)` idiom, and `params.enable_conda` is itself
+deprecated. Current bioconda has FastQC 0.12.1, fastp 1.3.6, SPAdes 4.3.0 and MultiQC 1.35,
+all with `linux-aarch64` builds.
+
+<a id="i-20"></a>
+## I-20 — `assets/samplesheet_contigs.csv` contains a literal `${HOME}` (P3)
+
+```
+sample,contigs
+contigs,${HOME}/viroprofiler/testdata/viroprofiler-test/contigs.fasta
+```
+
+`splitCsv` does no shell expansion, so this resolves to a directory literally named `${HOME}`.
+The file is also unused: contig-only runs are driven by `--input_contigs`, not by a
+samplesheet.

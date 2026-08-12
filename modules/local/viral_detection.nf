@@ -108,7 +108,7 @@ process VIRSORTER2 {
 
 
 process DVF {
-    label "viroprofiler_binning"
+    label "viroprofiler_dvf"
 
     input:
     path(contigs)

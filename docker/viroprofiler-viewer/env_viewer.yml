@@ -1,0 +1,39 @@
+name: viroprofiler-viewer
+channels:
+    - conda-forge
+    - bioconda
+dependencies:
+    - conda-forge::procps-ng=4.0.0
+    - conda-forge::r-base>=4.3
+    # bin/create_tse.r
+    - conda-forge::r-argparser
+    - conda-forge::r-readr
+    - conda-forge::r-remotes
+    # vpfkit (github.com/deng-lab/vpfkit) imports
+    - conda-forge::r-config
+    - conda-forge::r-data.table
+    - conda-forge::r-dplyr
+    - conda-forge::r-fontawesome
+    - conda-forge::r-ggplot2
+    - conda-forge::r-ggrepel
+    - conda-forge::r-golem
+    - conda-forge::r-htmltools
+    - conda-forge::r-magrittr
+    - conda-forge::r-openxlsx
+    - conda-forge::r-plotly
+    - conda-forge::r-reactable
+    - conda-forge::r-rlang
+    - conda-forge::r-shiny
+    - conda-forge::r-shinythemes
+    - conda-forge::r-stringr
+    - conda-forge::r-tibble
+    - conda-forge::r-tidyr
+    - conda-forge::r-vegan
+    - bioconda::bioconductor-mia
+    - bioconda::bioconductor-miaviz
+    - bioconda::bioconductor-multiassayexperiment
+    - bioconda::bioconductor-s4vectors
+    - bioconda::bioconductor-scater
+    - bioconda::bioconductor-singlecellexperiment
+    - bioconda::bioconductor-summarizedexperiment
+    - bioconda::bioconductor-treesummarizedexperiment

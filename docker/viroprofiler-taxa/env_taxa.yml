@@ -10,3 +10,4 @@ dependencies:
     - bioconda::csvtk
     - pandas
     - click
+    - wget
