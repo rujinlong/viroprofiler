@@ -10,6 +10,9 @@ dependencies:
     - conda-forge::r-readr
     - conda-forge::r-remotes
     # vpfkit (github.com/deng-lab/vpfkit) imports
+    # vpfkit's R sources call library(tidyverse) at load time even though its
+    # DESCRIPTION does not list it, so lazy loading fails without it.
+    - conda-forge::r-tidyverse
     - conda-forge::r-config
     - conda-forge::r-data.table
     - conda-forge::r-dplyr

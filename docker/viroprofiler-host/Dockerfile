@@ -62,8 +62,11 @@ RUN git init -q . && \
     git checkout -q FETCH_HEAD && \
     rm -rf .git
 
-# One conda solve: the fork's own environment file plus the three extra specs
-# this image needs on top of it.
+# One conda solve: the fork's own environment file plus the three extra specs this
+# image needs on top of it. They are listed on the command line rather than in a
+# second environment file because micromamba accepts only one YAML file per
+# invocation ("Can only handle 1 yaml file!"), so `-f a.yml -f b.yml` is not an
+# option; keep them here rather than reintroducing a yml that the build ignores.
 #   typer      - the fork's CLI imports it; installed from conda-forge so it is
 #                present before `pip install` has to resolve it
 #   seqkit     - VIRALHOST_IPHOP reports its version in versions.yml

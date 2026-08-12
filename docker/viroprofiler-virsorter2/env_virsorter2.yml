@@ -5,4 +5,7 @@ channels:
 dependencies:
     - conda-forge::procps-ng
     - bioconda::virsorter=2.2.4
+    # The VIRSORTER2 process post-processes VirSorter2's output with these.
+    - bioconda::seqkit
+    - bioconda::csvtk
     - conda-forge::wget

@@ -11,6 +11,8 @@ dependencies:
     - bioconda::prodigal-gv
     - bioconda::seqkit
     - bioconda::csvtk
+    # vcontact2 calls np.warnings, which numpy 1.24 removed.
+    - numpy<1.24
     - pandas
     - click
     - wget
