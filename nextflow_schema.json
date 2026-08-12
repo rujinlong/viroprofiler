@@ -331,6 +331,11 @@
                     "description": "Use DRAM for metabolic reconstruction",
                     "default": false
                 },
+                "use_dvf": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run DeepVirFinder. It has no linux-aarch64 build; see docs/dev/ARM64.md."
+                },
                 "input_contigs": {
                     "type": "string",
                     "description": "Input contigs file",

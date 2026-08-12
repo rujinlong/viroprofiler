@@ -105,10 +105,18 @@ workflow CONTIGANNO {
 
     // Viral detection: DVF + CheckV MQ, HQ, Complete + VirSorter2 + VIBRANT
     VIBRANT(ch_nrclib)
-    DVF(ch_nrclib)
-    ch_dvfscore = DVF.out.dvfscore_ch
-    ch_dvfseq = DVF.out.dvfseq_ch
-    ch_dvflist = DVF.out.dvflist_ch
+    if (params.use_dvf) {
+        DVF(ch_nrclib)
+        ch_dvfscore = DVF.out.dvfscore_ch
+        ch_dvfseq = DVF.out.dvfseq_ch
+        ch_dvflist = DVF.out.dvflist_ch
+    } else {
+        // DeepVirFinder pins theano 1.0.3 / keras 2.2.4 and cannot be built for aarch64.
+        // Feed an empty placeholder so the union in VIRCONTIGS_PRE still has a file to read.
+        ch_dvfscore = Channel.fromPath("${projectDir}/assets/no_dvf_scores.tsv").first()
+        ch_dvfseq = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
+        ch_dvflist = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
+    }
 
     VIRCONTIGS_PRE(ch_nrclib, ch_dvflist, CHECKV.out.checkv2vContigs_ch, VIBRANT.out.vibrant_ch)
     ch_putative_vList =  VIRCONTIGS_PRE.out.putative_vList_ch

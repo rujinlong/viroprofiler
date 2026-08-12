@@ -212,10 +212,21 @@ workflow VIROPROFILER {
 
             // Viral detection: DVF + CheckV MQ, HQ, Complete + VirSorter2 + VIBRANT
             VIBRANT(ch_nrclib)
-            DVF(ch_nrclib)
-            ch_dvfscore = DVF.out.dvfscore_ch
-            ch_dvfseq = DVF.out.dvfseq_ch
-            ch_dvflist = DVF.out.dvflist_ch
+            if (params.use_dvf) {
+                DVF(ch_nrclib)
+                ch_dvfscore = DVF.out.dvfscore_ch
+                ch_dvfseq = DVF.out.dvfseq_ch
+                ch_dvflist = DVF.out.dvflist_ch
+                ch_dvf2vcontigs = DVF.out.dvf2vContigs_ch
+            } else {
+                // DeepVirFinder pins theano 1.0.3 / keras 2.2.4 and cannot be built for
+                // aarch64. Feed empty placeholders so the union in VIRCONTIGS_PRE and the
+                // TSE assembly still have a file to read.
+                ch_dvfscore = Channel.fromPath("${projectDir}/assets/no_dvf_scores.tsv").first()
+                ch_dvfseq = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
+                ch_dvflist = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
+                ch_dvf2vcontigs = Channel.fromPath("${projectDir}/assets/no_dvf_scores.tsv").first()
+            }
 
             VIRCONTIGS_PRE(ch_nrclib, ch_dvflist, CHECKV.out.checkv2vContigs_ch, VIBRANT.out.vibrant_ch)
             ch_putative_vList =  VIRCONTIGS_PRE.out.putative_vList_ch
@@ -285,7 +296,7 @@ workflow VIROPROFILER {
             }
 
             // TreeSummarizedExperiment
-            RESULTS_TSE (ABUNDANCE.out.ab_count_ch, ABUNDANCE.out.ab_tpm_ch, ABUNDANCE.out.ab_covfrac_ch, TAXONOMY_MERGE.out.taxa_mmseqs_ch, CHECKV.out.checkv2vContigs_ch, VIRSORTER2.out.vs2_score_ch, VIBRANT.out.vibrant_quality_ch, DVF.out.dvf2vContigs_ch, ch_replicyc)
+            RESULTS_TSE (ABUNDANCE.out.ab_count_ch, ABUNDANCE.out.ab_tpm_ch, ABUNDANCE.out.ab_covfrac_ch, TAXONOMY_MERGE.out.taxa_mmseqs_ch, CHECKV.out.checkv2vContigs_ch, VIRSORTER2.out.vs2_score_ch, VIBRANT.out.vibrant_quality_ch, ch_dvf2vcontigs, ch_replicyc)
 
             CUSTOM_DUMPSOFTWAREVERSIONS (
                 ch_versions.unique().collectFile(name: 'collated_versions.yml')
