@@ -4,3 +4,5 @@ channels:
     - bioconda
 dependencies:
     - bacphlip
+    # bacphlip's scikit-learn still uses np.float, which numpy 1.24 removed.
+    - numpy<1.24

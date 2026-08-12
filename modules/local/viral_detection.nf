@@ -78,7 +78,11 @@ process VIRSORTER2 {
 
     script:
     """
-    #virsorter config --set HMMSEARCH_THREADS=$task.cpus
+    # VirSorter2 initializes its config template under $HOME/.virsorter. Nextflow runs
+    # Apptainer with --no-home, so $HOME is a read-only stub; point it at the task
+    # directory instead.
+    export HOME=\$PWD
+
     virsorter run --seqname-suffix-off --viral-gene-enrich-off --prep-for-dramv -i $contigs -w out_vs2 --include-groups $params.virsorter2_groups --min-length $params.contig_minlen --min-score 0.5 -j $task.cpus --provirus-off -d ${params.db}/virsorter2 all
     grep '^>' out_vs2/final-viral-combined.fa | sed 's/>//' | sed 's/||.*//' > virus_virsorter2.list
     ln -s out_vs2/for-dramv/final-viral-combined-for-dramv.fa .
