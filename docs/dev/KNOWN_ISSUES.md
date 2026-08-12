@@ -38,6 +38,8 @@ usability defect · **P3** hygiene.
 | [I-27](#i-27) | P1 | Containers — iPHoP built from bioconda carries three known defects | Fixed |
 | [I-28](#i-28) | P0 | Databases — DRAM's dbCAN downloads return an HTML landing page | Fixed |
 | [I-29](#i-29) | P1 | Databases — DRAM setup cannot tell a finished database from an abandoned one | Fixed |
+| [I-30](#i-30) | P0 | Databases — VOGDB moved its profiles into a subdirectory; DRAM builds an empty HMM file | Fixed |
+| [I-31](#i-31) | P1 | Databases — files unpacked by tar can land unreadable by their own owner | Fixed |
 
 ---
 
@@ -557,21 +559,84 @@ against a database that was never finished.
 
 The guard is now a completeness check of the `CONFIG` that DRAM will actually read. Every
 path it names must exist and be non-empty; none may begin with an HTML document (the failure
-mode in [I-28](#i-28)); the sidecar files that mmseqs and HMMER need but the `CONFIG` does
-not name — `.dbtype`/`.index` and `.h3f`/`.h3i`/`.h3m`/`.h3p` — must be present; and every
-description table in `description_db.sqlite` must have rows. The same check runs after the
+mode in [I-28](#i-28)); the sidecar files that mmseqs and HMMER need but the `CONFIG` does not
+name must be present — `.h3f`/`.h3i`/`.h3m`/`.h3p` for the HMM databases, and for the mmseqs
+ones both the `.idx*` k-mer index that `mmseqs search` needs and the `_h*` header database
+that DRAM opens directly to turn a hit into a description; and every description table in
+`description_db.sqlite` must have rows. The same check runs after the
 build, so a database that fails it makes the process exit non-zero instead of being
 published. An incomplete directory is deleted and rebuilt rather than reused.
 
-Two other things `prepare_databases` gets wrong are handled in the same place:
+The build now runs in the task work directory and is published to `${params.db}/dram` only
+once it is complete, which is what `DB_VIBRANT` and `DB_VREFSEQ` already do and what
+[I-31](#i-31) requires. Because `set_database_paths()` records every database under the path
+it was built at, the `CONFIG` is repointed at the published location afterwards and then
+re-checked.
 
-- It never deletes the intermediates it feeds to a finished step. `pfam.mmsmsa`, the
-  uncompressed mmseqs form of `Pfam-A.full.gz` that `msa2profile` consumes, is by far the
-  largest object the build produces and the `CONFIG` never refers to it. `DB_DRAM` removes it
-  along with the mmseqs `tmp` directory and the unpacked KOfam and VOGDB profile trees.
-- The build runs directly in `${params.db}/dram` rather than in the task work directory,
-  because staging that intermediate and copying it across filesystems is not viable.
+That needs room: `mmseqs convertmsa` turns the 22.3 GiB `Pfam-A.full.gz` into a 143 GB
+intermediate, and with the 25 GB of downloads and 25 GB of finished databases alongside it
+the build peaks at about 190 GB. `DB_DRAM` refuses to start below 250 GB rather than fill the
+filesystem two hours in.
+
+`prepare_databases` never deletes the intermediates it feeds to a step that has finished, and
+the `CONFIG` never refers to them, so `DB_DRAM` removes `pfam.mmsmsa`, the mmseqs `tmp`
+directory and the unpacked KOfam and VOGDB profile trees before publishing. They are larger
+than everything the build publishes put together.
 
 `--skip_uniref` is kept: UniRef90 adds several hundred GB and DRAM's own documentation states
 it does not affect distillation. KEGG is licensed and cannot be downloaded, so `kegg` and
 `gene_ko_link` stay unset; DRAM substitutes KOfam for KEGG orthology.
+
+<a id="i-30"></a>
+## I-30 — VOGDB moved its profiles into a subdirectory and DRAM silently builds nothing (P0)
+
+`vog.hmm.tar.gz` used to hold its profiles at the root of the archive. It now nests them:
+
+```
+$ tar -tzf vog.hmm.tar.gz | head -2
+hmm/VOG00001.hmm
+hmm/VOG00003.hmm
+```
+
+`process_vogdb()` unpacks the archive and then collects the profiles with
+`glob(path.join(hmm_dir, 'VOG*.hmm'))`, which matches the top level only. It finds none of
+the 49116 files, `merge_files()` writes a zero-byte `vog_latest_hmms.txt`, and `hmmpress`
+stops with "File exists, but appears to be empty?" — two hours into the build, after Pfam has
+been processed and with no way to resume.
+
+`docker/viroprofiler-geneannot/Dockerfile` makes the glob recursive, so it no longer depends
+on the archive's internal layout. `--vogdb_loc` is not a way out: DRAM unpacks whatever file
+it is handed and then applies the same glob, so the pipeline would have to download and
+repack the archive purely to satisfy a hardcoded path.
+
+<a id="i-31"></a>
+## I-31 — Files unpacked by tar can land unreadable by their own owner (P1)
+
+On a filesystem whose default ACL leaves the owner class empty — access being granted through
+a named entry instead — GNU tar restores each member's stored mode and produces files that
+their owner cannot open:
+
+```
+$ getfacl -p /mnt/scratch/db
+user::---
+user:allen:rwx
+default:user::---
+default:user:allen:rwx
+
+$ tar xzf probe.tar.gz -C /mnt/scratch/db/probe && ls -l /mnt/scratch/db/probe
+----rw---- 1 allen uucp 1 probe          # archived as -rw-rw-r--
+```
+
+Only tar is affected: `open()`, `touch` + `chmod`, `install -m` and `cp` all produce the mode
+they asked for on the same directory. DRAM unpacks the KOfam profiles with tar and then opens
+all 26000 of them, so the build dies with `PermissionError` an hour in. `DB_VREFSEQ` hits the
+same thing when it unpacks `mmseqs_vrefseq.tar.gz` and works around it with an explicit
+`chmod`, attributing it there to the archive's stored modes.
+
+Two things in `DB_DRAM` follow from this. The build happens in the task work directory rather
+than under `--db`, so the databases are assembled where the pipeline computes rather than
+wherever the user keeps storage; and before any of it starts, the process unpacks a one-file
+archive and checks that it can read the result, so an unsuitable work directory is reported in
+seconds with the reason and the fix (`-w`) instead of an hour later as a bare `PermissionError`.
+The published database is then made owner-readable explicitly, and `check_dram_db.py` opens
+every file the `CONFIG` names rather than trusting its mode bits.

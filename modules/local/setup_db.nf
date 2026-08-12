@@ -134,14 +134,19 @@ REQUIRED = (
                      'function_heatmap_form', 'amg_database')),
 )
 # mmseqs and HMMER spread one database over several files but the CONFIG names only the
-# first, so a half-written database still reads as present. Check what the search step opens.
+# first, so a half-written database still reads as present. Check what the search step opens:
+# the k-mer index `mmseqs search` needs, and the `_h` header database that DRAM reads
+# directly to turn a hit into a description.
+MMSEQS = ('.dbtype', '.index', '_h', '_h.dbtype', '_h.index',
+          '.idx', '.idx.dbtype', '.idx.index')
+HMMER = ('.h3f', '.h3i', '.h3m', '.h3p')
 SIDECARS = {
-    'pfam': ('.dbtype', '.index'),
-    'viral': ('.dbtype', '.index'),
-    'peptidase': ('.dbtype', '.index'),
-    'kofam_hmm': ('.h3f', '.h3i', '.h3m', '.h3p'),
-    'dbcan': ('.h3f', '.h3i', '.h3m', '.h3p'),
-    'vogdb': ('.h3f', '.h3i', '.h3m', '.h3p'),
+    'pfam': MMSEQS,
+    'viral': MMSEQS,
+    'peptidase': MMSEQS,
+    'kofam_hmm': HMMER,
+    'dbcan': HMMER,
+    'vogdb': HMMER,
 }
 # Written by `populate_description_db`; DRAM joins every annotation against these.
 DESCRIPTION_TABLES = ('pfam_description', 'dbcan_description', 'viral_description',
@@ -162,8 +167,14 @@ def check_file(label, loc):
     if os.path.getsize(loc) == 0:
         problems.append('%s names an empty file: %s' % (label, loc))
         return False
-    with open(loc, 'rb') as handle:
-        head = handle.read(512).lstrip().lower()
+    try:
+        with open(loc, 'rb') as handle:
+            head = handle.read(512).lstrip().lower()
+    except OSError as error:
+        # Unpacked files are routinely left unreadable by their own owner on a filesystem
+        # whose default ACL empties the owner class, so read rather than trust the mode.
+        problems.append('%s cannot be read: %s' % (label, error))
+        return False
     # Several of the hosts DRAM downloads from now answer a retired path with HTTP 200 and
     # a landing page, which urlretrieve stores as if it were the database.
     if head.startswith(b'<!doctype html') or head.startswith(b'<html'):
@@ -213,27 +224,75 @@ PYTHON
     if python check_dram_db.py "\$DRAM_DB"; then
         echo "DRAM database already exists"
     else
-        rm -rf "\$DRAM_DB"
-        mkdir -p "\$DRAM_DB"
+        BUILD_DIR="\$PWD/dram_build"
+
+        # `mmseqs convertmsa` expands Pfam-A.full.gz into a 143 GB intermediate, on top of
+        # 25 GB of downloads and 25 GB of finished databases. Refuse to start rather than
+        # fill the filesystem hours in.
+        REQUIRED_KB=\$((250 * 1024 * 1024))
+        AVAILABLE_KB=\$(df -Pk "\$PWD" | awk 'NR == 2 { print \$4 }')
+        if [ "\$AVAILABLE_KB" -lt "\$REQUIRED_KB" ]; then
+            echo "Building the DRAM database needs ~250 GB in the work directory, but only" >&2
+            echo "\$((AVAILABLE_KB / 1024 / 1024)) GB is free on the filesystem holding \$PWD." >&2
+            echo "Point Nextflow at a larger work directory with -w." >&2
+            exit 1
+        fi
+
+        # The finished database is published to --db, which is usually a different
+        # filesystem, and it is 38 GB.
+        mkdir -p "${params.db}"
+        PUBLISH_KB=\$(df -Pk "${params.db}" | awk 'NR == 2 { print \$4 }')
+        if [ "\$PUBLISH_KB" -lt \$((50 * 1024 * 1024)) ]; then
+            echo "The finished DRAM database needs ~40 GB under ${params.db}, but only" >&2
+            echo "\$((PUBLISH_KB / 1024 / 1024)) GB is free there." >&2
+            exit 1
+        fi
+
+        # GNU tar restores each member's stored mode, and on a filesystem whose default ACL
+        # leaves the owner class empty the result is a file that its own owner cannot read.
+        # DRAM unpacks the KOfam profiles with tar and then opens all 26000 of them, so
+        # establish here that the work directory does not do this.
+        mkdir -p tar_probe/in tar_probe/out
+        : > tar_probe/in/probe
+        chmod 664 tar_probe/in/probe
+        tar -czf tar_probe/probe.tar.gz -C tar_probe/in probe
+        tar -xzf tar_probe/probe.tar.gz -C tar_probe/out
+        if [ ! -r tar_probe/out/probe ]; then
+            echo "Files unpacked by tar into \$PWD are not readable by their owner, so the" >&2
+            echo "KOfam and VOGDB steps of the DRAM build cannot work here. This filesystem" >&2
+            echo "applies a default ACL that empties the owner class; choose a work directory" >&2
+            echo "elsewhere with -w." >&2
+            exit 1
+        fi
+        rm -rf tar_probe
 
         # `prepare_databases` writes the CONFIG itself, filling in the absolute path of
         # every database as it is downloaded, but it can only read a CONFIG that already
         # exists. So export the empty template that ships inside mag_annotator (with
         # DRAM_CONFIG_LOCATION unset, otherwise `export_config` reads the file it is
         # supposed to create) and point DRAM at that copy for the actual build.
-        #
-        # The build runs directly in its final location rather than in the task work
-        # directory: turning Pfam-A.full.gz into an mmseqs profile needs a ~180 GB
-        # intermediate, too large to stage and then copy across filesystems.
+        rm -rf "\$BUILD_DIR"
+        mkdir -p "\$BUILD_DIR"
         unset DRAM_CONFIG_LOCATION
-        DRAM-setup.py export_config --output_file "\$DRAM_DB/CONFIG"
-        export DRAM_CONFIG_LOCATION="\$DRAM_DB/CONFIG"
-        DRAM-setup.py prepare_databases --output_dir "\$DRAM_DB" --threads $task.cpus --skip_uniref --verbose
+        DRAM-setup.py export_config --output_file "\$BUILD_DIR/CONFIG"
+        export DRAM_CONFIG_LOCATION="\$BUILD_DIR/CONFIG"
+        DRAM-setup.py prepare_databases --output_dir "\$BUILD_DIR" --threads $task.cpus --skip_uniref --verbose
 
         # Inputs to steps that have finished. DRAM never deletes them and the CONFIG never
-        # names them, but `pfam.mmsmsa` alone is an order of magnitude larger than the
-        # database it was built from.
-        rm -rf "\$DRAM_DB"/pfam.mmsmsa* "\$DRAM_DB/tmp" "\$DRAM_DB/kofam_profiles" "\$DRAM_DB/vogdb_hmms"
+        # names them, but `pfam.mmsmsa` alone is an order of magnitude larger than every
+        # database the build publishes put together.
+        rm -rf "\$BUILD_DIR"/pfam.mmsmsa* "\$BUILD_DIR/tmp" "\$BUILD_DIR/kofam_profiles" "\$BUILD_DIR/vogdb_hmms"
+
+        # Publish, then repoint the CONFIG: `set_database_paths()` recorded every database
+        # under its build path.
+        rm -rf "\$DRAM_DB"
+        mkdir -p "\$DRAM_DB"
+        mv "\$BUILD_DIR"/* "\$DRAM_DB/"
+        rm -rf "\$BUILD_DIR"
+        sed -i "s|\$BUILD_DIR|\$DRAM_DB|g" "\$DRAM_DB/CONFIG"
+        export DRAM_CONFIG_LOCATION="\$DRAM_DB/CONFIG"
+        find "\$DRAM_DB" -type d -exec chmod u+rwx {} +
+        find "\$DRAM_DB" -type f -exec chmod u+rw {} +
 
         python check_dram_db.py "\$DRAM_DB" || {
             echo "DRAM finished but its database is unusable; see \$DRAM_DB/database_processing.log." >&2

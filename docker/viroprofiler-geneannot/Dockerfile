@@ -32,6 +32,19 @@ RUN DRAM_DB_PROCESSING="$(python -c 'import mag_annotator.database_processing as
     && grep -q 'https://pro.unl.edu/dbCAN2/download/dbCAN-HMMdb-V' "$DRAM_DB_PROCESSING" \
     && ! grep -q 'bcb\.unl\.edu' "$DRAM_DB_PROCESSING"
 
+# VOGDB used to ship `vog.hmm.tar.gz` with its 49116 profiles at the root of the archive and
+# now nests them in `hmm/`, but `process_vogdb` still globs only the top level. It therefore
+# concatenates nothing, writes an empty `vog_latest_hmms.txt`, and `hmmpress` stops with
+# "File exists, but appears to be empty?" -- two hours into the build, after Pfam. Make the
+# glob recursive so it no longer depends on the archive's internal layout. Supplying the
+# archive through `--vogdb_loc` is no answer: DRAM unpacks whatever it is given and then
+# applies the same glob, so the pipeline would have to download and repack the archive purely
+# to satisfy a hardcoded path.
+RUN DRAM_DB_PROCESSING="$(python -c 'import mag_annotator.database_processing as m; print(m.__file__)')" \
+    && sed -i -E "s|glob\(path\.join\(hmm_dir, 'VOG\*\.hmm'\)\)|glob(path.join(hmm_dir, '**', 'VOG*.hmm'), recursive=True)|" \
+        "$DRAM_DB_PROCESSING" \
+    && grep -q "glob(path.join(hmm_dir, '\*\*', 'VOG\*.hmm'), recursive=True)" "$DRAM_DB_PROCESSING"
+
 # Install emapper to `viroprofiler_emapper` env
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba create -f /tmp/env_emapper.yml -y
 
