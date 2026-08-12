@@ -9,7 +9,7 @@ dependencies:
   - pytest
   - scikit-bio
   - prodigal
-  - mmseqs2==13.45111
+  - mmseqs2=17.b804f
   - hmmer!=3.3.1
   - trnascan-se>=2
   - sqlalchemy
@@ -21,4 +21,4 @@ dependencies:
   - parallel
   - dram
   - click
-  - scipy==1.8.1
+  - scipy

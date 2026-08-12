@@ -72,6 +72,15 @@ class WorkflowMain {
         // Check AWS batch settings
         NfcoreTemplate.awsBatch(workflow, params)
 
+        // The database root is bind-mounted into every container (see the `containerOptions`
+        // closure in nextflow.config). Apptainer/Singularity refuse to bind a path that does
+        // not exist, so create it up front -- `--mode setup` populates it afterwards.
+        def db_dir = new File(params.db as String)
+        if (!db_dir.exists() && !db_dir.mkdirs()) {
+            log.error "Cannot create the database directory '${db_dir}'. Pass a writable path with --db."
+            System.exit(1)
+        }
+
         // Check input has been provided
         // if (!params.input) {
         //     log.error "Please provide an input samplesheet to the pipeline e.g. '--input samplesheet.csv'"

@@ -21,9 +21,4 @@ RUN VCONTACT2_DATA=$(python3 -c "import site; print(site.getsitepackages()[0])")
 RUN micromamba clean --all --yes
 
 # Set PATH manually, because nextflow doesn't activate base env by default.
-ENV PATH=/opt/mmseqs/bin:/opt/conda/bin:$PATH
-
-RUN cd /opt && \
-    wget https://mmseqs.com/latest/mmseqs-linux-avx2.tar.gz && \
-    tar xvfz mmseqs-linux-avx2.tar.gz && \
-    rm mmseqs-linux-avx2.tar.gz
+ENV PATH=/opt/conda/bin:$PATH
