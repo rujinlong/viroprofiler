@@ -24,7 +24,7 @@ process BRACKEN_DB {
     wd=\$(pwd)
     mkdir -p brackenDB/taxonomy
     cd brackenDB/taxonomy
-    ln -s ${params.db}/bracken/taxonomy/* .
+    ln -s ${params.db}/kraken2/taxonomy/* .
     cd \$wd
     kraken2-build --add-to-library viroprofiler_ref.fasta --db brackenDB
     kraken2-build --build --db brackenDB

@@ -108,7 +108,12 @@ workflow VIROPROFILER {
 
             // Decontamination
             if (params.use_decontam) {
-                ch_contamref = Channel.fromPath("${params.contamref_idx}", checkIfExists: true).first()
+                def contamref = params.contamref_idx ?: "${params.db}/contamination_refs/hg19/ref"
+                if (!file(contamref).exists()) {
+                    exit 1, "Decontamination is enabled but no reference index was found at '${contamref}'.\n" +
+                            "Build a BBMap index there, point --contamref_idx at an existing one, or pass --use_decontam false."
+                }
+                ch_contamref = Channel.fromPath(contamref, checkIfExists: true).first()
                 DECONTAM (FASTP.out.reads, ch_contamref)
                 ch_clean_reads = DECONTAM.out.reads
                 ch_versions = ch_versions.mix(DECONTAM.out.versions.first())

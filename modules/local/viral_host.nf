@@ -15,7 +15,16 @@ process VIRALHOST_IPHOP {
     task.ext.when == null || task.ext.when
 
     """
-    iphop predict --fa_file $contigs --out_dir out_iphop --db_dir ${params.db}/iphop/Aug_2023_pub_rw --num_threads $task.cpus
+    # `iphop download` unpacks into a release-specific directory (Sept_2021_pub_rw,
+    # Aug_2023_pub_rw, ...), so resolve it instead of hardcoding one release.
+    iphop_db=\$(find ${params.db}/iphop -mindepth 1 -maxdepth 1 -type d -name '*_pub_rw' | sort | tail -n1)
+    if [ -z "\$iphop_db" ]; then
+        echo "No iPHoP database found under ${params.db}/iphop." >&2
+        echo "Run the pipeline with --mode setup, or pass --use_iphop false." >&2
+        exit 1
+    fi
+
+    iphop predict --fa_file $contigs --out_dir out_iphop --db_dir \$iphop_db --num_threads $task.cpus
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

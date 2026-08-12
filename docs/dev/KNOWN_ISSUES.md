@@ -14,8 +14,8 @@ usability defect · **P3** hygiene.
 | [I-03](#i-03) | P0 | Config — `params.db` never bind-mounted into containers | Fixed |
 | [I-04](#i-04) | P1 | Test data — stub samplesheet uses launch-dir-relative paths | Fixed |
 | [I-05](#i-05) | P1 | Config — `params.tracedir` frozen to the default `outdir` | Fixed |
-| [I-06](#i-06) | P1 | Databases — iPHoP DB directory name hardcoded and stale | Open |
-| [I-07](#i-07) | P1 | Databases — Bracken/Kraken2 DB paths disagree | Open |
+| [I-06](#i-06) | P1 | Databases — iPHoP DB directory name hardcoded and stale | Fixed |
+| [I-07](#i-07) | P1 | Databases — Bracken/Kraken2 DB paths disagree | Fixed |
 | [I-08](#i-08) | P2 | Databases — NCBI taxonomy pinned to a 2022 archive snapshot | Open |
 | [I-09](#i-09) | P2 | Databases — VOGDB host renamed; plain-HTTP URL | Open |
 | [I-10](#i-10) | P2 | Databases — setup steps are not resumable and never verified | Open |
@@ -23,12 +23,13 @@ usability defect · **P3** hygiene.
 | [I-12](#i-12) | P2 | Config — `docker.userEmulation` removed in modern Nextflow | Fixed |
 | [I-13](#i-13) | P3 | Repo — stub output directories committed despite `.gitignore` | Open |
 | [I-14](#i-14) | P3 | Docs — `CLAUDE.md` references an MCP server that is not part of the repo | Open |
-| [I-15](#i-15) | P1 | Config — `contamref_idx` ignores `--db` and nothing ever creates it | Open |
+| [I-15](#i-15) | P1 | Config — `contamref_idx` ignores `--db` and nothing ever creates it | Partly fixed — follows `--db`, still not built by setup |
 | [I-16](#i-16) | P1 | Config — `modules.config` loaded after `profiles`, so containers were unoverridable | Fixed |
 | [I-17](#i-17) | P2 | Containers — Dockerfiles call `wget` that is only present transitively | Fixed |
 | [I-18](#i-18) | P2 | Containers — DeepVirFinder bundled into the binning image | Fixed |
 | [I-19](#i-19) | P2 | Modules — vendored nf-core modules and their containers are from 2022 | Open |
 | [I-20](#i-20) | P3 | Assets — `samplesheet_contigs.csv` contains a literal `${HOME}` | Open |
+| [I-21](#i-21) | P1 | Containers — 2022-era tools break on modern Python/setuptools | Fixed |
 
 ---
 
@@ -307,3 +308,23 @@ contigs,${HOME}/viroprofiler/testdata/viroprofiler-test/contigs.fasta
 `splitCsv` does no shell expansion, so this resolves to a directory literally named `${HOME}`.
 The file is also unused: contig-only runs are driven by `--input_contigs`, not by a
 samplesheet.
+
+<a id="i-21"></a>
+## I-21 — 2022-era tools break on a modern Python/setuptools (P1)
+
+Loosening the conda pins so the environments solve on `linux-aarch64` also lets the solver
+pick current Python and setuptools, and three tools break there:
+
+| Tool | Failure |
+|------|---------|
+| VirSorter2 2.2.4 | `ImportError: cannot import name 'load_configfile' from 'snakemake'` — removed in snakemake 8 |
+| DRAM 1.3.5 | `ModuleNotFoundError: No module named 'pkg_resources'` on Python 3.14 |
+| vConTACT2 0.11.3 | same `pkg_resources` failure |
+
+`pkg_resources` cannot be restored just by adding `setuptools`: setuptools 81 dropped it, and
+the solver picks 84 by default. The environments therefore pin `python=3.10` and
+`setuptools<81`, and VirSorter2 now comes from bioconda instead of a `pip install -e` of git
+master, so its recipe constrains snakemake for us.
+
+This is the general hazard when reviving a pipeline whose environments were captured in
+2022: an unpinned solve is not a "newer, better" environment, it is an untested one.

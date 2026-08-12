@@ -4,7 +4,9 @@ channels:
   - bioconda
 dependencies:
   - conda-forge::procps-ng=4.0.0
-  - python>=3.7
+  - python=3.10
+  # pkg_resources, which DRAM's mag_annotator imports, was dropped in setuptools 81.
+  - setuptools<81
   - pandas
   - pytest
   - scikit-bio

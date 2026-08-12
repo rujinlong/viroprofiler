@@ -3,21 +3,6 @@ channels:
     - conda-forge
     - bioconda
 dependencies:
-    - python>=3.6
-    - scikit-learn
-    - imbalanced-learn
-    - pandas
-    - seaborn
-    - hmmer
-    - prodigal
-    - screed
-    - ruamel.yaml
-    - snakemake
-    - click
-    - mamba
     - conda-forge::procps-ng
-    - seqkit
-    - csvtk
-    - conda-forge::glpk
-    - wget
-
+    - bioconda::virsorter=2.2.4
+    - conda-forge::wget

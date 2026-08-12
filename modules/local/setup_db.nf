@@ -205,9 +205,8 @@ process DB_IPHOP {
         mkdir -p ${params.db}/iphop
         iphop download -d $params.db/iphop -n
 
-        # Remove the tar.gz file to save space
-        sleep 10
-        rm -rf ${params.db}/iphop/iPHoP_db_Sept21.tar.gz
+        # Drop the archive whatever release it belongs to; the name changes every release.
+        rm -f ${params.db}/iphop/*.tar.gz
     else
         echo "iPHOP database already exists"
     fi

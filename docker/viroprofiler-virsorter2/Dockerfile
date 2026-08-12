@@ -1,6 +1,11 @@
-FROM mambaorg/micromamba:0.25.1
+FROM mambaorg/micromamba:1.5.8
 
 LABEL author="Jinlong Ru"
+
+# VirSorter2 is installed from bioconda rather than from git master. The recipe pins the
+# dependency versions VirSorter2 2.2.4 actually works with -- notably snakemake, whose
+# top-level `load_configfile` was removed in snakemake 8, which breaks `virsorter setup`
+# with an ImportError.
 
 USER root
 
@@ -10,12 +15,8 @@ ARG MAMBA_DOCKERFILE_ACTIVATE=1
 ENV PATH=/opt/conda/bin:$PATH
 
 # Copy conda env files
-COPY ./docker/viroprofiler-virsorter2/env_*.yml /tmp
+COPY ./docker/viroprofiler-virsorter2/env_virsorter2.yml /tmp
 
-# Install packages
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba install -n base -f /tmp/env_virsorter2.yml -y
 
-RUN apt-get update && apt-get install git -y && cd / && git clone https://github.com/jiarong/VirSorter2.git && cd VirSorter2 && pip install -e .
-
-# clean
-#RUN micromamba clean --all --yes
+RUN micromamba clean --all --yes

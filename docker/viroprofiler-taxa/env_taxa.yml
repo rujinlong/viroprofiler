@@ -4,6 +4,9 @@ channels:
     - bioconda
 dependencies:
     - conda-forge::procps-ng=4.0.0
+    - python=3.10
+    # pkg_resources, which vcontact2 imports, was dropped in setuptools 81.
+    - setuptools<81
     - bioconda::vcontact2
     - bioconda::prodigal-gv
     - bioconda::seqkit
