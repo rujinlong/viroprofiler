@@ -18,6 +18,20 @@ COPY ./docker/viroprofiler-geneannot/env_*.yml /tmp
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba install -n base -f /tmp/env_dram.yml -y
 RUN pip install --no-cache-dir --no-deps DRAM-bio==1.4.6
 
+# DRAM 1.4.6 downloads all three dbCAN files from `bcb.unl.edu`. That host now answers
+# every path below /dbCAN2/download/ with HTTP 200 and the dbCAN landing page, so
+# `urlretrieve` silently stores an HTML document where the HMM profiles and the CAZy family
+# descriptions should be. The files are still published, unchanged, from `pro.unl.edu`; only
+# the host moved, so rewrite it. This has to be done in the installed library rather than
+# passed in at run time: `prepare_databases` builds its list of user-supplied files from the
+# arguments whose names end in `_loc`, and neither `dbcan_fam_activities` nor
+# `dbcan_subfam_ec` does, so `--dbcan_fam_activities` is silently ignored and the sub-family
+# EC file has no command-line option at all.
+RUN DRAM_DB_PROCESSING="$(python -c 'import mag_annotator.database_processing as m; print(m.__file__)')" \
+    && sed -i -E 's|https?://bcb\.unl\.edu/dbCAN2/|https://pro.unl.edu/dbCAN2/|g' "$DRAM_DB_PROCESSING" \
+    && grep -q 'https://pro.unl.edu/dbCAN2/download/dbCAN-HMMdb-V' "$DRAM_DB_PROCESSING" \
+    && ! grep -q 'bcb\.unl\.edu' "$DRAM_DB_PROCESSING"
+
 # Install emapper to `viroprofiler_emapper` env
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba create -f /tmp/env_emapper.yml -y
 

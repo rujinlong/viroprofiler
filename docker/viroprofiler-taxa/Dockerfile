@@ -22,3 +22,11 @@ RUN micromamba clean --all --yes
 
 # Set PATH manually, because nextflow doesn't activate base env by default.
 ENV PATH=/opt/conda/bin:$PATH
+
+# ClusterONE is vcontact2's default viral-cluster algorithm (--vcs-mode ClusterONE) but is
+# not redistributable, so the bioconda package cannot ship it and vcontact2 fails with
+# "Could not find ClusterONE java file". Fetch it here; the TAXONOMY_VCONTACT process
+# passes this path with --c1-bin.
+RUN /opt/conda/bin/wget -q -O /opt/conda/bin/cluster_one-1.0.jar \
+        https://paccanarolab.org/static_content/clusterone/cluster_one-1.0.jar && \
+    test -s /opt/conda/bin/cluster_one-1.0.jar

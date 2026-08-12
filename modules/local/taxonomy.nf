@@ -21,7 +21,7 @@ process TAXONOMY_VCONTACT {
     seqkit seq -m 1 prodigal/all.faa | sed 's/*//' |  grep -v '^\$' > proteins.faa
     seqkit seq -m 1 prodigal/all.fna | sed 's/*//' |  grep -v '^\$' > genes.fna
     gene_to_genome.py -a proteins.faa -o vcontact_gene2genome.tsv
-    vcontact2 --raw-proteins proteins.faa --rel-mode 'Diamond' --proteins-fp vcontact_gene2genome.tsv --db 'ProkaryoticViralRefSeq211-Merged' --pcs-mode MCL --vcs-mode ClusterONE --output-dir out_vContact2 -t $task.cpus --pc-inflation $params.pc_inflation --vc-inflation $params.vc_inflation
+    vcontact2 --c1-bin /opt/conda/bin/cluster_one-1.0.jar --raw-proteins proteins.faa --rel-mode 'Diamond' --proteins-fp vcontact_gene2genome.tsv --db 'ProkaryoticViralRefSeq211-Merged' --pcs-mode MCL --vcs-mode ClusterONE --output-dir out_vContact2 -t $task.cpus --pc-inflation $params.pc_inflation --vc-inflation $params.vc_inflation
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

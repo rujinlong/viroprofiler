@@ -16,3 +16,13 @@ dependencies:
     - pandas
     - click
     - wget
+    # vcontact2 shells out to these at run time. The 0.11.1 recipe declared them
+    # (diamond 2.0.6, mcl 14.137, java-jdk 8.0.112, taxonkit 0.12.0); 0.11.3 dropped the
+    # declarations, so they have to be supplied here or vcontact2 aborts with
+    # "Could not find <tool> in $PATH".
+    - bioconda::diamond
+    - bioconda::mcl
+    - bioconda::blast
+    - bioconda::taxonkit
+    # ClusterONE, which vcontact2 uses for viral-cluster generation, is a Java jar.
+    - openjdk

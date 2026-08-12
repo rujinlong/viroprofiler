@@ -105,19 +105,140 @@ process DB_DRAM {
 
     script:
     """
-    if [ ! -d ${params.db}/dram ]; then
-        mkdir -p ${params.db}/dram
+    # DRAM writes into \$HOME while importing its dependencies, and Nextflow runs Apptainer
+    # with --no-home, so \$HOME is a read-only stub.
+    export HOME=\$PWD
+
+    DRAM_DB="${params.db}/dram"
+
+    # A directory-existence guard cannot be used here. `prepare_databases` downloads and
+    # processes sixteen databases over several hours with no resume support, so an
+    # interrupted or partly failed build leaves a directory that looks finished; two earlier
+    # setups produced exactly that. Check instead that the CONFIG DRAM will actually read
+    # names a usable file for every database, and rebuild from scratch when it does not.
+    cat > check_dram_db.py <<'PYTHON'
+import json
+import os
+import sqlite3
+import sys
+
+# Everything `prepare_databases --skip_uniref` is expected to produce. KEGG is absent
+# because it is licensed and DRAM cannot download it; UniRef is skipped because it costs
+# several hundred GB and does not affect distillation.
+REQUIRED = (
+    ('search_databases', ('kofam_hmm', 'kofam_ko_list', 'pfam', 'dbcan', 'viral',
+                          'peptidase', 'vogdb')),
+    ('database_descriptions', ('pfam_hmm', 'dbcan_fam_activities', 'dbcan_subfam_ec',
+                               'vog_annotations')),
+    ('dram_sheets', ('genome_summary_form', 'module_step_form', 'etc_module_database',
+                     'function_heatmap_form', 'amg_database')),
+)
+# mmseqs and HMMER spread one database over several files but the CONFIG names only the
+# first, so a half-written database still reads as present. Check what the search step opens.
+SIDECARS = {
+    'pfam': ('.dbtype', '.index'),
+    'viral': ('.dbtype', '.index'),
+    'peptidase': ('.dbtype', '.index'),
+    'kofam_hmm': ('.h3f', '.h3i', '.h3m', '.h3p'),
+    'dbcan': ('.h3f', '.h3i', '.h3m', '.h3p'),
+    'vogdb': ('.h3f', '.h3i', '.h3m', '.h3p'),
+}
+# Written by `populate_description_db`; DRAM joins every annotation against these.
+DESCRIPTION_TABLES = ('pfam_description', 'dbcan_description', 'viral_description',
+                      'peptidase_description', 'vogdb_description')
+
+db_dir = sys.argv[1]
+config_loc = os.path.join(db_dir, 'CONFIG')
+problems = []
+
+
+def check_file(label, loc):
+    if loc is None:
+        problems.append('%s is not set' % label)
+        return False
+    if not os.path.isfile(loc):
+        problems.append('%s names a missing file: %s' % (label, loc))
+        return False
+    if os.path.getsize(loc) == 0:
+        problems.append('%s names an empty file: %s' % (label, loc))
+        return False
+    with open(loc, 'rb') as handle:
+        head = handle.read(512).lstrip().lower()
+    # Several of the hosts DRAM downloads from now answer a retired path with HTTP 200 and
+    # a landing page, which urlretrieve stores as if it were the database.
+    if head.startswith(b'<!doctype html') or head.startswith(b'<html'):
+        problems.append('%s names an HTML page, not a database: %s' % (label, loc))
+        return False
+    return True
+
+
+if not os.path.isfile(config_loc):
+    print('No DRAM CONFIG at %s' % config_loc)
+    sys.exit(1)
+try:
+    with open(config_loc) as handle:
+        config = json.load(handle)
+except ValueError as error:
+    print('DRAM CONFIG at %s is not readable JSON: %s' % (config_loc, error))
+    sys.exit(1)
+
+for section, names in REQUIRED:
+    entries = config.get(section) or {}
+    for name in names:
+        loc = entries.get(name)
+        if check_file('%s.%s' % (section, name), loc):
+            for suffix in SIDECARS.get(name, ()):
+                check_file('%s.%s%s' % (section, name, suffix), loc + suffix)
+
+if check_file('description_db', config.get('description_db')):
+    connection = sqlite3.connect(config['description_db'])
+    for table in DESCRIPTION_TABLES:
+        try:
+            rows = connection.execute('SELECT count(*) FROM ' + table).fetchone()[0]
+        except sqlite3.Error as error:
+            problems.append('description_db has no usable %s table: %s' % (table, error))
+            continue
+        if rows == 0:
+            problems.append('description_db table %s is empty' % table)
+    connection.close()
+
+if problems:
+    print('The DRAM database in %s is not usable:' % db_dir)
+    for problem in problems:
+        print('  - %s' % problem)
+    sys.exit(1)
+print('The DRAM database in %s is complete.' % db_dir)
+PYTHON
+
+    if python check_dram_db.py "\$DRAM_DB"; then
+        echo "DRAM database already exists"
+    else
+        rm -rf "\$DRAM_DB"
+        mkdir -p "\$DRAM_DB"
+
         # `prepare_databases` writes the CONFIG itself, filling in the absolute path of
         # every database as it is downloaded, but it can only read a CONFIG that already
         # exists. So export the empty template that ships inside mag_annotator (with
         # DRAM_CONFIG_LOCATION unset, otherwise `export_config` reads the file it is
         # supposed to create) and point DRAM at that copy for the actual build.
+        #
+        # The build runs directly in its final location rather than in the task work
+        # directory: turning Pfam-A.full.gz into an mmseqs profile needs a ~180 GB
+        # intermediate, too large to stage and then copy across filesystems.
         unset DRAM_CONFIG_LOCATION
-        DRAM-setup.py export_config --output_file ${params.db}/dram/CONFIG
-        export DRAM_CONFIG_LOCATION=${params.db}/dram/CONFIG
-        DRAM-setup.py prepare_databases --output_dir ${params.db}/dram --threads $task.cpus --skip_uniref
-    else
-        echo "DRAM database already exists"
+        DRAM-setup.py export_config --output_file "\$DRAM_DB/CONFIG"
+        export DRAM_CONFIG_LOCATION="\$DRAM_DB/CONFIG"
+        DRAM-setup.py prepare_databases --output_dir "\$DRAM_DB" --threads $task.cpus --skip_uniref --verbose
+
+        # Inputs to steps that have finished. DRAM never deletes them and the CONFIG never
+        # names them, but `pfam.mmsmsa` alone is an order of magnitude larger than the
+        # database it was built from.
+        rm -rf "\$DRAM_DB"/pfam.mmsmsa* "\$DRAM_DB/tmp" "\$DRAM_DB/kofam_profiles" "\$DRAM_DB/vogdb_hmms"
+
+        python check_dram_db.py "\$DRAM_DB" || {
+            echo "DRAM finished but its database is unusable; see \$DRAM_DB/database_processing.log." >&2
+            exit 1
+        }
     fi
     """
 

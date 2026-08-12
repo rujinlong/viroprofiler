@@ -36,6 +36,8 @@ usability defect · **P3** hygiene.
 | [I-25](#i-25) | P1 | Containers — eggNOG-mapper 2.1.9 needs `distutils`, gone in Python 3.12 | Fixed |
 | [I-26](#i-26) | P0 | Databases — VIBRANT setup reports success with an unusable database | Fixed |
 | [I-27](#i-27) | P1 | Containers — iPHoP built from bioconda carries three known defects | Fixed |
+| [I-28](#i-28) | P0 | Databases — DRAM's dbCAN downloads return an HTML landing page | Fixed |
+| [I-29](#i-29) | P1 | Databases — DRAM setup cannot tell a finished database from an abandoned one | Fixed |
 
 ---
 
@@ -486,3 +488,90 @@ The image is now built from the hardened fork at `github.com/rujinlong/iphop`, p
 
 Separately, `iphop --version` does not exist in any iPHoP release, so `versions.yml`
 recorded an empty iPHoP version. The process now reads `iphop.__version__` instead.
+
+<a id="i-28"></a>
+## I-28 — DRAM's dbCAN downloads return an HTML landing page (P0)
+
+`mag_annotator/database_processing.py` fetches all three dbCAN files from `bcb.unl.edu`.
+That host now redirects every path below `/dbCAN2/download/` to the dbCAN home page and
+answers `200`:
+
+```
+$ curl -sIL -o /dev/null -w '%{http_code} %{content_type} %{url_effective}\n' \
+    http://bcb.unl.edu/dbCAN2/download/dbCAN-HMMdb-V11.txt
+200 text/html; charset=UTF-8 https://pro.unl.edu/dbCAN2/
+```
+
+`download_file()` uses `urlretrieve`, which treats that as a successful download and writes
+the 8 KB landing page to `dbCAN-HMMdb-V11.txt`, `CAZyDB.08062022.fam-activities.txt` and
+`CAZyDB.08062022.fam.subfam.ec.txt`. `hmmpress` at least rejects the first one; the other two
+are description files that nothing validates, so they are parsed straight into
+`description_db.sqlite` and every dbCAN annotation comes out as fragments of HTML.
+
+The files themselves are unchanged and still published — only the host moved:
+
+```
+$ curl -sIL -o /dev/null -w '%{http_code} %{content_type}\n' \
+    https://pro.unl.edu/dbCAN2/download/dbCAN-HMMdb-V11.txt
+200 text/plain
+```
+
+`docker/viroprofiler-geneannot/Dockerfile` therefore rewrites the host in the installed
+`mag_annotator`, and the same `RUN` asserts that the rewrite matched so a future DRAM
+release cannot silently skip it. Patching the library is the last resort, but it is the only
+option here: `prepare_databases()` collects user-supplied files with
+
+```python
+locs = {remove_suffix(i, '_loc'): j for i, j in locals().items() if i.endswith('_loc') and j is not None}
+```
+
+and neither `dbcan_fam_activities` nor `dbcan_subfam_ec` carries the `_loc` suffix, so
+`--dbcan_fam_activities` is accepted and then ignored, and the sub-family EC file has no
+command-line option at all. The same defect makes `--vog_annotations` a no-op.
+
+Every other source DRAM 1.4.6 uses was re-checked at the same time and is alive
+(2026-08-12). All of them are tried over `ftp://` first with an `http(s)://` fallback, and on
+this network FTP is reachable for all three hosts, so both routes work:
+
+| Database | URL | Status |
+|----------|-----|--------|
+| KOfam profiles, KO list | `ftp.genome.jp/pub/db/kofam/` | 200, ~8 MB/s over FTP |
+| Pfam-A.full, Pfam-A.hmm.dat | `ftp.ebi.ac.uk/pub/databases/Pfam/current_release/` | 200, ~3 MB/s; `Pfam-A.full.gz` is 22.3 GiB |
+| MEROPS pepunit.lib | `ftp.ebi.ac.uk/pub/databases/merops/current_release/` | 200, 436 MiB |
+| RefSeq viral proteins | `ftp.ncbi.nlm.nih.gov/refseq/release/viral/` | 200; one `viral.N.protein.faa.gz` exists, which is what `NUMBER_OF_VIRAL_FILES = 1` expects |
+| VOGDB hmms, annotations | `fileshare.csb.univie.ac.at/vog/latest/` | 301 to `fileshare.lisc.univie.ac.at`, followed automatically |
+| DRAM distillation sheets | `raw.githubusercontent.com/WrightonLabCSU/DRAM/master/data/` | 200 |
+| dbCAN HMMs, family activities, sub-family EC | `bcb.unl.edu/dbCAN2/download/` | **dead**, see above |
+
+`DB_VOGDB` reaches the same VOGDB host over plain HTTP; that is tracked separately as
+[I-09](#i-09).
+
+<a id="i-29"></a>
+## I-29 — DRAM setup cannot tell a finished database from an abandoned one (P1)
+
+`DB_DRAM` guarded its work with `[ ! -d ${params.db}/dram ]`. `prepare_databases` downloads
+and processes sixteen databases over several hours and cannot resume, so any interruption
+leaves a directory that satisfies the guard forever: the next run prints "DRAM database
+already exists", the pipeline reports success, and `DRAM-v.py annotate` fails much later
+against a database that was never finished.
+
+The guard is now a completeness check of the `CONFIG` that DRAM will actually read. Every
+path it names must exist and be non-empty; none may begin with an HTML document (the failure
+mode in [I-28](#i-28)); the sidecar files that mmseqs and HMMER need but the `CONFIG` does
+not name — `.dbtype`/`.index` and `.h3f`/`.h3i`/`.h3m`/`.h3p` — must be present; and every
+description table in `description_db.sqlite` must have rows. The same check runs after the
+build, so a database that fails it makes the process exit non-zero instead of being
+published. An incomplete directory is deleted and rebuilt rather than reused.
+
+Two other things `prepare_databases` gets wrong are handled in the same place:
+
+- It never deletes the intermediates it feeds to a finished step. `pfam.mmsmsa`, the
+  uncompressed mmseqs form of `Pfam-A.full.gz` that `msa2profile` consumes, is by far the
+  largest object the build produces and the `CONFIG` never refers to it. `DB_DRAM` removes it
+  along with the mmseqs `tmp` directory and the unpacked KOfam and VOGDB profile trees.
+- The build runs directly in `${params.db}/dram` rather than in the task work directory,
+  because staging that intermediate and copying it across filesystems is not viable.
+
+`--skip_uniref` is kept: UniRef90 adds several hundred GB and DRAM's own documentation states
+it does not affect distillation. KEGG is licensed and cannot be downloaded, so `kegg` and
+`gene_ko_link` stay unset; DRAM substitutes KOfam for KEGG orthology.
