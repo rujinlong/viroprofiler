@@ -91,6 +91,7 @@ process REPLIDEC {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     Replidec -p multiSeqEachAsOne -i $contigs -t $task.cpus -s out_replidec.tsv -w tmp
     mv tmp/out_replidec.tsv .

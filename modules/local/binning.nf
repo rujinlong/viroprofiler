@@ -13,6 +13,7 @@ process VAMB {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     jgi_summarize_bam_contig_depths --outputDepth depth.txt $bams
     cut -f1-3 depth.txt > col1to3.txt
@@ -48,6 +49,7 @@ process PHAMB_RF{
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     run_RF.py -f $CONTIGS -d $output_dvf -p $hmm_MiComplete -g $hmm_VOGDB -c $cluster  -l $params.binning_minlen_contig -m /opt/phamb/workflows/mag_annotation/dbs/RF_model.python39.sav -s $params.binning_minlen_bin -o .
     mv vamb_bins/vamb_bins.1.fna .

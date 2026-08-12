@@ -15,6 +15,7 @@ process DRAMV {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     # DRAM takes every database location from its CONFIG, which DB_DRAM wrote with the
     # absolute paths under --db. That directory is bind-mounted into the container at the
@@ -59,6 +60,7 @@ process MICOMPLETEDB{
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     hmmsearch --cpu $task.cpus -E 1.0e-05 -o out_miComplete --tblout hmmMiComplete.tbl ${params.db}/micomplete/Bact105.hmm $prot
     """
@@ -82,6 +84,7 @@ process VOGDB{
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     hmmsearch --cpu $task.cpus -E 1.0e-05 -o out_vogdb --tblout hmmVOG.tbl ${params.db}/vogdb/AllVOG.hmm $prot
     """
@@ -104,6 +107,7 @@ process EMAPPER {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     emapper.py -i $prot_faa -o eggnog --cpu $task.cpus --no_file_comments -m diamond --data_dir ${params.db}/eggnog
     parse_eggnog.py -i eggnog.emapper.annotations -o anno_eggnog.tsv

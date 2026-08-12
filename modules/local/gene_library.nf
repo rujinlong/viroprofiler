@@ -13,6 +13,7 @@ process GENEPRED {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     prodigal-gv -i $contigs -o all.gff -a all.faa -d all.fna -p meta -f gff -g 11
     pretty_gff.py -i all.gff -o genes_${prefix}.gff
@@ -46,6 +47,7 @@ process NRSEQS {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     mmseqs easy-cluster $seqs $prefix tmp --min-seq-id $min_similarity -c $min_coverage --threads $task.cpus
     """

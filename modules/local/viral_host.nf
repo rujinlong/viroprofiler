@@ -14,6 +14,7 @@ process VIRALHOST_IPHOP {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     # `iphop download` unpacks into a release-specific directory (Sept_2021_pub_rw,
     # Aug_2023_pub_rw, ...), so resolve it instead of hardcoding one release.

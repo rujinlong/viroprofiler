@@ -12,6 +12,7 @@ process TAXONOMY_VCONTACT {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     seqkit seq -m $params.contig_minlen_vcontact2 $contigs > input.fasta
     prodigal-gv -i input.fasta -o all.gff -a all.faa -d all.fna -p meta -f gff
@@ -55,6 +56,7 @@ process TAXONOMY_MMSEQS {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     # Run mmseqs taxonomy
     mmseqs createdb $contigs qry
@@ -99,6 +101,7 @@ process TAXONOMY_MERGE {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     parse_vContact2_vc.py -i $taxa_vc -o taxa_vc2 -a $params.assembler
     parse_mmseqsTaxa.py -i $taxa_mmseqs -o taxa_mmseqs -u "" -s $params.taxa_db_source

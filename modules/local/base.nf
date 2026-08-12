@@ -19,6 +19,7 @@ process RESULTS_TSE {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     create_tse.r --fin_abcount $abundance_count \\
                  --fin_abtpm $abundance_tpm \\

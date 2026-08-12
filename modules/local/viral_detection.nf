@@ -76,6 +76,7 @@ process VIRSORTER2 {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     #virsorter config --set HMMSEARCH_THREADS=$task.cpus
     virsorter run --seqname-suffix-off --viral-gene-enrich-off --prep-for-dramv -i $contigs -w out_vs2 --include-groups $params.virsorter2_groups --min-length $params.contig_minlen --min-score 0.5 -j $task.cpus --provirus-off -d ${params.db}/virsorter2 all
@@ -123,6 +124,7 @@ process DVF {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     export OMP_NUM_THREADS=$task.cpus
     seqkit seq -M $params.dvf_maxlen $contigs > contigs_maxlen.fasta
@@ -155,6 +157,7 @@ process VIBRANT {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     ln -s $contigs contigs.fasta
     VIBRANT_run.py -i contigs.fasta -d $params.db/vibrant/databases -m $params.db/vibrant/files -t $task.cpus -virome
@@ -186,6 +189,7 @@ process VIRCONTIGS_PRE {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     cat ${vibrant_dir}/VIBRANT_phages_contigs/contigs.phages_combined.fna | seqkit fx2tab -n > vibrant_vcontigs.list
     csvtk grep -t -r -f checkv_quality -p 'Complete|High-quality|Medium-quality|Low-quality' $checkv_quality | cut -f1 | sed 1d > checkv_vcontigs.list

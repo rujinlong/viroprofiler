@@ -14,6 +14,7 @@ process MAPPING2CONTIGS {
     when:
     task.ext.when == null || task.ext.when
     
+    script:
     """
     # Only use paired-end reads for mapping
     minimap2 -t $task.cpus -ax sr $contigs $illumina | \\
@@ -149,6 +150,7 @@ process ABUNDANCE {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     coverm contig --methods reads_per_base --bam-files $bams -t $task.cpus --min-read-percent-identity 0.95 1> abundance_contigs_reads_per_base.tsv 2> log_contig_reads_per_base.txt
     sed -i '1 s/ Reads per base//g' abundance_contigs_reads_per_base.tsv
