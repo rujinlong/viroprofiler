@@ -4,8 +4,15 @@
 # SIF files for Apptainer.
 #
 # The images published on Docker Hub are amd64-only, so on arm64 they have to be rebuilt
-# from the Dockerfiles in this directory. One image is deliberately absent: see
-# docs/dev/ARM64.md for why iPHoP cannot be built for this architecture.
+# from the Dockerfiles in this directory. One image is deliberately absent -- see
+# docs/dev/ARM64.md for why iPHoP cannot be built for this architecture -- and one tool is
+# absent from an image that does build: `viroprofiler-binning` omits VAMB on arm64, which is
+# what makes `--binning phamb` amd64-only.
+#
+# Every image except `host` installs from a committed pixi.lock, so a rebuild reproduces the
+# package set that was tested rather than re-solving. If a build fails with "lock file not
+# up-to-date with the workspace", run `pixi lock` in that image's directory, re-test the
+# image, and commit the result -- do not treat the refreshed lock as a formality.
 #
 # Usage:
 #   bash docker/build_arm64.sh                 # build everything, write SIFs to the default dir

@@ -1,0 +1,16 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler Kraken2/Bracken image (process labels: viroprofiler_bracken)
+#
+# Optional read-level taxonomic profiling, reached only through --use_kraken2.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-bracken"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+bracken = "*"
+csvtk = "*"
+seqkit = "*"

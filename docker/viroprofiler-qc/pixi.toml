@@ -1,0 +1,21 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler QC image (FASTQC, FASTP, SPADES, MULTIQC)
+#
+# The vendored nf-core modules point at quay.io/biocontainers images, which
+# exist for amd64 only. This image provides the same tools for any architecture
+# bioconda builds for, and conf/arm64_local.config redirects those four
+# processes here.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-qc"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+fastqc = "*"
+fastp = "*"
+spades = "*"
+multiqc = "*"
+pyyaml = "*"

@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler VITAP image (process labels: viroprofiler_vitap)
+#
+# VITAP classifies viral contigs down to species by scoring them against ICTV
+# reference genomes on a multipartite graph. It is the highest-priority taxonomy
+# source in the merge.
+#
+# This lock covers the conda side. VITAP itself is pip-installed from a pinned
+# commit in the Dockerfile with `--no-deps`, which is required rather than an
+# optimisation: its setup.py lists `entrez-direct`, `seqkit`, `prodigal` and
+# `diamond` in install_requires, and none of those is a PyPI distribution. The
+# Python libraries it actually imports are declared here instead.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-vitap"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+# VITAP 1.7.1 declares `python_requires='>=3.9'`; its own environment file pins 3.12.
+python = "3.12.*"
+pip = "*"
+# The three external executables `VITAP assignment` runs. `prodigal`, not
+# `prodigal-gv`: VITAP's own environment file lists prodigal-gv, but
+# VITAP_assignment_20241007.py calls the executable `prodigal`, and the
+# prodigal-gv package installs its binary under that name only.
+diamond = "2.1.16.*"
+seqkit = "*"
+prodigal = "2.6.3.*"
+# Python runtime dependencies of the assignment step. pandas is held below 3:
+# VITAP 1.7.1 was developed against the 2.1 series and pandas 3 changes
+# copy-on-write and string dtype semantics throughout.
+pandas = ">=2.1,<3"
+numpy = ">=1.25"
+networkx = ">=3.1"
+biopython = ">=1.78"
+tqdm = ">=4.65"
+# DB_VITAP downloads and unpacks the published database with these.
+wget = "*"
+unzip = "*"

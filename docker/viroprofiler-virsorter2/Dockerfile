@@ -1,22 +1,36 @@
-FROM mambaorg/micromamba:1.5.8
+# ---------------------------------------------------------------------------
+# ViroProfiler VirSorter2 image (process label: viroprofiler_virsorter2)
+#
+# VirSorter2 is not a detector here: it runs on the already-selected candidates
+# to produce viral-affi-contigs-for-dramv.tab, without which `DRAM-v.py distill`
+# raises KeyError on the missing auxiliary_score column.
+#
+# Built from a committed lockfile: `pixi install --locked` refuses to build if
+# pixi.lock does not match pixi.toml. See docs/dev/PACKAGING.md.
+# ---------------------------------------------------------------------------
+FROM ghcr.io/prefix-dev/pixi:0.73.0@sha256:66ae514a4421ca06587291beb037e5151b1b280a4f54eed82f57e9b70b94d5ca
 
 LABEL author="Jinlong Ru"
 
-# VirSorter2 is installed from bioconda rather than from git master. The recipe pins the
-# dependency versions VirSorter2 2.2.4 actually works with -- notably snakemake, whose
-# top-level `load_configfile` was removed in snakemake 8, which breaks `virsorter setup`
-# with an ImportError.
+WORKDIR /app
 
-USER root
+COPY ./docker/viroprofiler-virsorter2/pixi.toml ./docker/viroprofiler-virsorter2/pixi.lock /app/
 
-# Activate conda env during docker build
-ARG MAMBA_DOCKERFILE_ACTIVATE=1
-# Set PATH manually, because nextflow doesn't activate base env by default.
-ENV PATH=/opt/conda/bin:$PATH
+RUN --mount=type=cache,target=/root/.cache/rattler \
+    pixi install --locked
 
-# Copy conda env files
-COPY ./docker/viroprofiler-virsorter2/env_virsorter2.yml /tmp
+# Nextflow does not activate an environment: it writes a `.command.sh` and runs
+# it, so every tool must resolve from PATH alone.
+ENV PATH=/app/.pixi/envs/default/bin:$PATH
 
-RUN --mount=type=cache,target=/opt/conda/pkgs micromamba install -n base -f /tmp/env_virsorter2.yml -y
+# Smoke test in a stripped environment, because that is how `.command.sh` runs.
+# `ps` is checked because Nextflow's trace observer calls it.
+RUN env -i HOME=/tmp LANG=C.UTF-8 PATH=/app/.pixi/envs/default/bin:/usr/bin:/bin \
+    bash -c 'virsorter --version 2>&1 | head -1 && virsorter setup --help > /dev/null && seqkit version && csvtk version && ps -p 1 -o comm='
 
-RUN micromamba clean --all --yes
+# The pixi base image sets an entrypoint. Nextflow executes its own
+# `.command.sh`, so nothing may prefix the command.
+ENTRYPOINT []
+CMD ["/bin/bash"]
+
+WORKDIR /

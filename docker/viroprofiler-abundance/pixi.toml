@@ -1,0 +1,21 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler abundance image (process labels: viroprofiler_abundance)
+#
+# Read mapping and coverage: bowtie2 builds the index and maps, samtools sorts,
+# CoverM turns the BAMs into count, TPM, trimmed-mean and covered-fraction
+# tables.
+#
+# Bounds here are declared intent; pixi.lock records what was chosen and is what
+# the build installs. Re-lock deliberately and re-test.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-abundance"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+bowtie2 = "*"
+samtools = "*"
+coverm = "*"

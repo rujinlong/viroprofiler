@@ -1,0 +1,82 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler binning image (process label: viroprofiler_binning)
+#
+# Two environments, each with its OWN solve-group:
+#
+#   binning  Everything the VRHYME, VAMB, PHAMB_RF and PHAMB_DVF_TABLE processes
+#            call. PHAMB comes from git rather than the `hcc` conda channel,
+#            pinned to a commit.
+#   vamb     VAMB, whose clusters PHAMB classifies. linux-64 ONLY, declared here
+#            rather than left to fail at build time: releases through 4.1.3 are
+#            published for linux-64 alone, and the noarch 5.x needs pycoverm,
+#            which is a Rust extension with no aarch64 artifact. This is what
+#            makes `--binning phamb` amd64-only, and
+#            WorkflowViroprofiler.binningIsAvailable() refuses it on aarch64.
+#
+#            3.0.2, not 4.x or 5.x, and the version is load-bearing:
+#              * VAMB 4 removed `--jgi` entirely. It accepts only `--bamfiles`
+#                or a `.npz`, and it hashes the BAM reference names against the
+#                FASTA, so it cannot be given a contig subset with BAMs mapped
+#                to the full library -- which is exactly what this pipeline has.
+#              * 5.x additionally renamed and restructured the cluster output
+#                that PHAMB's `read_clusters` parses.
+#            3.0.2 is the release PHAMB was developed against, and it writes the
+#            two-column `clustername<TAB>contigname` file phamb expects. It runs
+#            on Python 3.6, which is why it is isolated in its own environment;
+#            the lockfile is what keeps that environment installable.
+#
+# There is no separate vRhyme environment. `vRhyme` is declared in the binning
+# feature, which is where the executable that VRHYME actually runs has always
+# come from -- the micromamba image built a second `viroprofiler-vrhyme` prefix
+# that was never on PATH, and whose unpinned solve had drifted to Python 3.14,
+# where `vRhyme` no longer starts at all.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-binning"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[feature.binning.dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+# `jgi_summarize_bam_contig_depths`, which VAMB's --jgi input comes from.
+metabat2 = "*"
+# 3.10, matching what the micromamba image resolved to and what the pinned
+# scikit-learn below has builds for.
+python = "3.10.*"
+pip = "*"
+# Pinned, and not a guess: PHAMB's random forest is a joblib-serialised
+# scikit-learn estimator, phamb's own setup.py requires exactly 1.0.2, and this
+# is the version the previous image ended up with once pip had overridden the
+# unpinned conda one. Declaring it here means the conda solve and the PyPI
+# resolve agree instead of fighting.
+scikit-learn = "1.0.2.*"
+# vRhyme, the binner reachable through `--binning vrhyme`. It is the only
+# binning method available on aarch64.
+vrhyme = "1.1.0.*"
+csvtk = "*"
+seqkit = "*"
+biopython = "*"
+numpy = ">=1.17"
+numba = ">=0.50.0"
+pandas = ">=1.0.0"
+pysam = ">=0.15"
+networkx = ">=2.0"
+pygraphviz = "*"
+click = "*"
+snakemake = "*"
+wget = "*"
+
+[feature.binning.pypi-dependencies]
+# PHAMB's random forest and the run_RF.py driver. Pinned to a commit because the
+# project publishes no releases and its CLI changed shape after the last one.
+phamb = { git = "https://github.com/RasmussenLab/phamb.git", rev = "b197f98f9d892151e1c4be830af346e98cc9cfd4" }
+
+[feature.vamb]
+platforms = ["linux-64"]
+[feature.vamb.dependencies]
+vamb = "3.0.2.*"
+
+[environments]
+binning = { features = ["binning"], solve-group = "binning" }
+vamb = { features = ["vamb"], solve-group = "vamb" }

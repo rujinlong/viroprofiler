@@ -1,0 +1,33 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler replication-cycle image (process labels: viroprofiler_replicyc)
+#
+# Replidec and bacphlip predict whether a phage is lytic or temperate. They are
+# two environments in one image because their dependencies conflict: bacphlip's
+# scikit-learn still calls np.float, which numpy removed in 1.24, while Replidec
+# is built against a current numpy.
+#
+# Each environment gets its OWN solve-group. Sharing one would make pixi
+# co-solve them and rediscover exactly the conflict the split exists to avoid.
+#
+# The bounds below are declared intent, not the lock. `pixi.lock` records what
+# was actually chosen and is what the build installs; re-lock deliberately and
+# re-test, never as a side effect of a rebuild.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-replicyc"
+channels = ["denglab", "conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[feature.replidec.dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+replidec = "*"
+
+[feature.bacphlip.dependencies]
+bacphlip = "*"
+# bacphlip's scikit-learn still uses np.float, which numpy 1.24 removed.
+numpy = "<1.24"
+
+[environments]
+replidec = { features = ["replidec"], solve-group = "replidec" }
+bacphlip = { features = ["bacphlip"], solve-group = "bacphlip" }

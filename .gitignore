@@ -11,3 +11,8 @@ testing*
 
 # git worktrees created for isolated agent runs
 .claude/worktrees/
+
+# pixi's local environment directory. `pixi lock` creates it as a side effect; only
+# pixi.toml and pixi.lock belong in the repository -- the environments themselves are
+# built inside the images.
+docker/*/.pixi/

@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler vConTACT3 image (process labels: viroprofiler_vcontact3)
+#
+# vConTACT3 predicts taxonomy from gene sharing against a reference set.
+#
+# This lock covers the conda side. vConTACT3 itself is pip-installed from a
+# pinned Bitbucket commit in the Dockerfile: there is no `vcontact3` package on
+# PyPI at all, the bioconda package is 3.0.3 against a 3.2.4 source tree, and
+# two of the bioconda dependencies (`fastcluster`, `jenkspy`) have no
+# linux-aarch64 conda build.
+#
+# pandas is deliberately NOT declared here. vConTACT3 declares `pandas>=2.1.1`
+# with an open upper bound, and the Dockerfile pins `<3` at pip time so that pip
+# resolves it once rather than replacing a conda-pinned copy.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-vcontact3"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+# vConTACT3 3.2.4 declares `Requires-Python: >=3.10,<3.12`.
+python = "3.11.*"
+pip = "*"
+# The only external executable vConTACT3 looks up and requires. Held at the
+# version the rest of the pipeline uses, so that the databases DB_VCONTACT3
+# verifies with `mmseqs dbtype` are read by the same release that searches them.
+mmseqs2 = "17.b804f.*"
+# vConTACT3 3.2.4 never invokes diamond. Kept because it is cheap and a site
+# pinning an older vConTACT3 still finds it.
+diamond = "*"
+# TAXONOMY_VCONTACT3 applies the --contig_minlen_vcontact3 filter with this.
+seqkit = "*"
+# merge_taxonomy.py, run by TAXONOMY_MERGE.
+click = "*"

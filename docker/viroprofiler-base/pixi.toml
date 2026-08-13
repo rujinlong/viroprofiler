@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler base image (process label: viroprofiler_base)
+#
+# The most widely shared image: CheckV, the contig library, VIRCONTIGS_PRE, gene
+# prediction, TAXONOMY_MERGE and most DB_* processes all run here.
+#
+# Three environments, each with its OWN solve-group. They exist because their
+# dependencies conflict -- CheckV pins numpy 1.23.1, VirSorter2 pins Python
+# 3.10.0 exactly -- and a shared solve-group would recreate that conflict.
+#
+# Two facts about how tools resolve here, both load-bearing:
+#
+#   * `prodigal-gv` and `hmmsearch` are NOT declared in [feature.base]. GENEPRED,
+#     MICOMPLETEDB and VOGDB call them by bare name and get CheckV's copies,
+#     because `envs/checkv/bin` is on PATH. Declaring them in the base feature
+#     would put a different build first on PATH for CheckV's own internal calls
+#     too, which is a change to what CheckV runs, not a packaging change.
+#     Whoever edits [feature.checkv] should know those three processes depend
+#     on it.
+#   * The `virsorter2` environment has no consumer in this image. Every process
+#     that runs VirSorter2 carries the `viroprofiler_virsorter2` label and gets
+#     docker/viroprofiler-virsorter2 instead. It is kept here so that this
+#     migration changes packaging only; removing it is a separate decision.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-base"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[feature.base.dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+bbmap = "*"
+seqkit = "*"
+samtools = "*"
+blast = "*"
+click = "*"
+pandas = "*"
+biopython = "*"
+csvtk = "*"
+wget = "*"
+pigz = "*"
+coverm = "*"
+# Held at the version DB_VCONTACT3 verifies its databases with, so the release
+# that checks a database is the release that later searches it.
+mmseqs2 = "17.b804f.*"
+unzip = "*"
+
+[feature.checkv.dependencies]
+checkv = "1.0.1.*"
+# CheckV 1.0.1 calls np.int/np.float, removed in numpy 1.24.
+numpy = "1.23.1.*"
+
+[feature.virsorter2.dependencies]
+virsorter = "2.2.4.*"
+
+[environments]
+base = { features = ["base"], solve-group = "base" }
+checkv = { features = ["checkv"], solve-group = "checkv" }
+virsorter2 = { features = ["virsorter2"], solve-group = "virsorter2" }

@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler CheckAMG image (process labels: viroprofiler_checkamg)
+#
+# CheckAMG curates auxiliary genes -- AMGs, AReGs and APGs -- from functional
+# annotation plus genomic context.
+#
+# This lock covers the conda side only. CheckAMG itself, torch and torch_scatter
+# are pip-installed in the Dockerfile and cannot move here:
+#   * torch comes from PyTorch's CPU index, because PyPI's aarch64 wheel is the
+#     CUDA build and drags in ~4 GB of nvidia-* wheels for a pipeline that uses
+#     no GPU.
+#   * torch_scatter ships no aarch64 wheel and its setup.py imports torch at
+#     build time, so it needs `--no-build-isolation`, which no lockfile
+#     expresses.
+# Both are pinned by version in the Dockerfile instead.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-checkamg"
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "*"
+# CheckAMG 1.1.x declares `Requires-Python: >=3.11`.
+python = "3.11.*"
+pip = "*"
+# `torch_scatter` compiles a C++ extension from its sdist under
+# `--no-build-isolation`, so the build backend must already be present.
+setuptools = "*"
+wheel = "*"
+cxx-compiler = "*"

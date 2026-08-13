@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler viewer image (process label: viroprofiler_vpfkit)
+#
+# The R runtime for RESULTS_TSE (bin/create_tse.r), which assembles the final
+# TreeSummarizedExperiment with vpfkit.
+#
+# This lock covers the conda side. vpfkit is not on conda and is installed with
+# `remotes::install_github` in the Dockerfile, pinned to a commit SHA -- `main`
+# would let a rebuild change what create_tse.r calls without any file here
+# changing.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-viewer"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+r-base = ">=4.3"
+# bin/create_tse.r
+r-argparser = "*"
+r-readr = "*"
+# vpfkit::read_coverm() reads abundance_*.tsv.gz with data.table::fread(), which
+# delegates gz decompression to R.utils. Without it RESULTS_TSE cannot read any
+# abundance table.
+"r-r.utils" = "*"
+r-remotes = "*"
+# vpfkit's R sources call library(tidyverse) at load time even though its
+# DESCRIPTION does not list it, so lazy loading fails without it.
+r-tidyverse = "*"
+r-config = "*"
+"r-data.table" = "*"
+r-dplyr = "*"
+r-fontawesome = "*"
+r-ggplot2 = "*"
+r-ggrepel = "*"
+r-golem = "*"
+r-htmltools = "*"
+r-magrittr = "*"
+r-openxlsx = "*"
+r-plotly = "*"
+r-reactable = "*"
+r-rlang = "*"
+r-shiny = "*"
+r-shinythemes = "*"
+r-stringr = "*"
+r-tibble = "*"
+r-tidyr = "*"
+r-vegan = "*"
+# GenomeInfoDb loads its taxonomy tables from this separate annotation-data
+# package at namespace load time, and nothing in the dependency chain declares it,
+# so a solve without it installs a GenomeInfoDb that cannot be loaded --
+# `library(vpfkit)` then dies with "there is no package called 'GenomeInfoDbData'".
+bioconductor-genomeinfodbdata = "*"
+bioconductor-mia = "*"
+bioconductor-miaviz = "*"
+bioconductor-multiassayexperiment = "*"
+bioconductor-s4vectors = "*"
+bioconductor-scater = "*"
+bioconductor-singlecellexperiment = "*"
+bioconductor-summarizedexperiment = "*"
+bioconductor-treesummarizedexperiment = "*"

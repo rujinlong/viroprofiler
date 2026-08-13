@@ -1,0 +1,68 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler gene-annotation image (process label: viroprofiler_geneannot)
+#
+# Three environments, each with its OWN solve-group: DRAM needs Python 3.10,
+# pandas <2 and setuptools <81; eggNOG-mapper needs Python <3.12; abricate is
+# Perl. Co-solving them reproduces the conflicts the split exists to avoid.
+#
+# DRAM itself is NOT here. It is pip-installed in the Dockerfile because every
+# bioconda build of `dram 1.4.6` constrains scikit-bio <0.6, and conda-forge
+# publishes no scikit-bio below 0.6.0 for linux-aarch64, so the conda solve is
+# unsatisfiable on arm64. The bioconda package is built from the same PyPI sdist
+# (`DRAM-bio`), so pip installs identical code with a solvable dependency set.
+# It stays outside the lock; the Dockerfile pins it by version.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-geneannot"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[feature.dram.dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+python = "3.10.*"
+# mag_annotator/database_handler.py still does `from pkg_resources import
+# resource_filename`; setuptools 81 removed pkg_resources.
+setuptools = "<81"
+pip = "*"
+# DRAM 1.4.6 requires pandas <2: mag_annotator still calls the Series.iteritems()
+# method that pandas 2.0 removed.
+pandas = ">=1.5,<2"
+numpy = "<2"
+# DRAM asks for scikit-bio <0.6, which has no linux-aarch64 build at all. 0.6.x
+# is the closest available and still provides every skbio API DRAM imports.
+scikit-bio = "<0.7"
+scipy = ">=1.9"
+pytest = "*"
+prodigal = "*"
+mmseqs2 = "17.b804f.*"
+hmmer = "!=3.3.1"
+"trnascan-se" = ">=2"
+sqlalchemy = "*"
+barrnap = "*"
+altair = ">=4"
+openpyxl = "*"
+networkx = "*"
+ruby = "*"
+parallel = "*"
+curl = "*"
+wget = "*"
+click = "*"
+
+[feature.emapper.dependencies]
+procps-ng = "4.0.0.*"
+# eggnogmapper/common.py still does `from distutils.spawn import find_executable`,
+# and distutils was removed from the standard library in Python 3.12.
+python = "<3.12"
+"eggnog-mapper" = "2.1.9.*"
+pandas = "*"
+click = "*"
+
+[feature.abricate.dependencies]
+procps-ng = "4.0.0.*"
+abricate = "1.0.1.*"
+
+[environments]
+dram = { features = ["dram"], solve-group = "dram" }
+emapper = { features = ["emapper"], solve-group = "emapper" }
+abricate = { features = ["abricate"], solve-group = "abricate" }

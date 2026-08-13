@@ -1,49 +1,35 @@
 # ---------------------------------------------------------------------------
 # ViroProfiler Vclust image (process label: viroprofiler_vclust)
 #
-# Vclust dereplicates the pooled contig library: a Kmer-db prefilter narrows the
-# candidate pairs, LZ-ANI aligns the survivors, and the clustering step applies
-# the MIUViG containment rule. It replaces the all-vs-all `blastn` +
-# `anicalc.py` + `aniclust.py` chain that used to live in the base image; see
-# docs/dev/KNOWN_ISSUES.md I-32 for why that chain had to go.
+# Vclust dereplicates the pooled contig library. `vclust info` is checked
+# because it proves the bundled kmer-db and lz-ani binaries are present and
+# executable, which `vclust --version` alone does not.
 #
-# This is a separate image rather than an addition to `viroprofiler-base`
-# because nothing else in the pipeline needs Vclust, and the base image is
-# already the largest and most frequently rebuilt one.
-#
-# bioconda publishes `vclust` for linux-aarch64 as well as linux-64, so this
-# image builds on both architectures without a source build.
+# Built from a committed lockfile: `pixi install --locked` refuses to build if
+# pixi.lock does not match pixi.toml. See docs/dev/PACKAGING.md.
 # ---------------------------------------------------------------------------
-FROM mambaorg/micromamba:1.5.8
+FROM ghcr.io/prefix-dev/pixi:0.73.0@sha256:66ae514a4421ca06587291beb037e5151b1b280a4f54eed82f57e9b70b94d5ca
 
 LABEL author="Jinlong Ru"
 
-USER root
+WORKDIR /app
 
-# Activate the base env for the RUN steps below.
-ARG MAMBA_DOCKERFILE_ACTIVATE=1
-# Set PATH manually, because Nextflow does not activate a conda env: `vclust`,
-# `seqkit`, `samtools` and `python3` must be callable straight from
-# `.command.sh`.
-ENV PATH=/opt/conda/bin:$PATH
+COPY ./docker/viroprofiler-vclust/pixi.toml ./docker/viroprofiler-vclust/pixi.lock /app/
 
-COPY ./docker/viroprofiler-vclust/env_vclust.yml /tmp
+RUN --mount=type=cache,target=/root/.cache/rattler \
+    pixi install --locked
 
-RUN --mount=type=cache,target=/opt/conda/pkgs \
-    micromamba install -n base -f /tmp/env_vclust.yml -y
+# Nextflow does not activate an environment: it writes a `.command.sh` and runs
+# it, so every tool must resolve from PATH alone.
+ENV PATH=/app/.pixi/envs/default/bin:$PATH
 
-RUN micromamba clean --all --yes
+# Smoke test in a stripped environment, because that is how `.command.sh` runs.
+# `ps` is checked because Nextflow's trace observer calls it.
+RUN env -i HOME=/tmp LANG=C.UTF-8 PATH=/app/.pixi/envs/default/bin:/usr/bin:/bin \
+    bash -c 'vclust --version && vclust info > /dev/null && seqkit version && samtools --version | head -1 && ps -p 1 -o comm='
 
-# Smoke test. Nextflow runs its `.command.sh` without activating a conda env, so
-# every tool CONTIGLIB_CLUSTER calls has to work from PATH alone -- run the
-# check in a stripped environment rather than the activated build shell.
-# `vclust info` also proves that the bundled kmer-db and lz-ani binaries are
-# present and executable, which `vclust --version` alone does not.
-RUN env -i HOME=/root LANG=C.UTF-8 PATH=/opt/conda/bin:/usr/local/bin:/usr/bin:/bin \
-    bash -c 'vclust --version && vclust info && seqkit version && samtools --version | head -1 && python3 -c "import sys; print(sys.version)"'
-
-# The mambaorg base image installs an env-activation entrypoint. Nextflow
-# executes its own `.command.sh`, so nothing may prefix the command.
+# The pixi base image sets an entrypoint. Nextflow executes its own
+# `.command.sh`, so nothing may prefix the command.
 ENTRYPOINT []
 CMD ["/bin/bash"]
 
