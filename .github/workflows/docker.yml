@@ -7,6 +7,37 @@ on:
       - "docker*"
 
 jobs:
+  # The lockfiles are what make the images reproducible, so verify them on every push --
+  # a lock nothing checks is a comment. `--dry-run` is required: plain `pixi lock --check`
+  # exits non-zero on drift but REWRITES pixi.lock while doing so, leaving CI with a dirty
+  # tree and the drift silently absorbed.
+  check_locks:
+    name: pixi.lock matches pixi.toml
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Install pixi
+        uses: prefix-dev/setup-pixi@v0
+        with:
+          pixi-version: v0.73.0
+          run-install: false
+
+      - name: Verify every lockfile is up to date
+        run: |
+          status=0
+          for manifest in docker/*/pixi.toml; do
+              dir=$(dirname "$manifest")
+              if pixi lock --check --dry-run --manifest-path "$manifest"; then
+                  echo "OK    $dir"
+              else
+                  echo "STALE $dir -- run 'pixi lock' there, re-test the image, and commit the result"
+                  status=1
+              fi
+          done
+          exit $status
+
   push_to_registry:
     name: Push Docker image to Docker Hub
     runs-on: ubuntu-latest
@@ -32,8 +63,6 @@ jobs:
           #   image: denglab/viroprofiler-vibrant
           # - dockerfile: ./docker/viroprofiler-bracken/Dockerfile
           #   image: denglab/viroprofiler-bracken
-          # - dockerfile: ./docker/viroprofiler-phamb/Dockerfile
-          #   image: denglab/viroprofiler-phamb
           # - dockerfile: ./docker/viroprofiler-virsorter2/Dockerfile
           #   image: denglab/viroprofiler-virsorter2
     permissions:

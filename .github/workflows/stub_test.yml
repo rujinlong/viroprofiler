@@ -224,3 +224,121 @@ jobs:
           path: |
             nextflow_stub_opts.log
             .nextflow.log
+
+  stub_binning_phamb:
+    name: Stub test - PHAMB binning (amd64 only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # PHAMB classifies VAMB's clusters and VAMB has no linux-aarch64 build, so
+    # WorkflowViroprofiler.binningIsAvailable() refuses this combination on arm64. The
+    # GitHub runner is x86-64, which makes CI the only place this path is exercised.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          version: ">=23.04.0"
+
+      - name: Run stub test
+        run: |
+          nextflow run main.nf \
+            -stub \
+            -profile test_stub \
+            --binning phamb \
+            --use_phamb true \
+            --outdir output_stub_phamb \
+            2>&1 | tee nextflow_stub_phamb.log
+
+      - name: Verify success and that PHAMB actually ran
+        run: |
+          if grep -q "ERROR ~" nextflow_stub_phamb.log; then
+            echo "=== Errors found ==="
+            grep "ERROR ~" nextflow_stub_phamb.log
+            exit 1
+          fi
+          for proc in vMAG_PHAMB:VAMB vMAG_PHAMB:PHAMB_DVF_TABLE vMAG_PHAMB:PHAMB_RF; do
+            grep -q "$proc" nextflow_stub_phamb.log || \
+              { echo "$proc did not run"; exit 1; }
+          done
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stub-phamb-logs
+          path: |
+            nextflow_stub_phamb.log
+            .nextflow.log
+
+  stub_modes:
+    name: Stub test - --mode ladder
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Each mode must run its own stages and stop. A stage list that silently grows is the
+    # defect this guards: before the modes were implemented, `--mode fastqc` ran assembly
+    # and CheckV.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          version: ">=23.04.0"
+
+      - name: Each mode stops where it should
+        run: |
+          set -euo pipefail
+          run_mode () {
+            nextflow run main.nf -stub -profile test_stub \
+              --mode "$1" --outdir "output_stub_mode_$1" 2>&1 | tee "mode_$1.log"
+          }
+          must_run ()     { grep -q ":$2\b"  "mode_$1.log" || { echo "mode $1: $2 should have run";     exit 1; }; }
+          must_not_run () { grep -q ":$2\b" "mode_$1.log" && { echo "mode $1: $2 should NOT have run"; exit 1; }; true; }
+
+          run_mode fastqc
+          must_run     fastqc FASTQC
+          must_not_run fastqc FASTP
+          must_not_run fastqc SPADES
+
+          run_mode fastp
+          must_run     fastp FASTP
+          must_not_run fastp SPADES
+
+          run_mode contiglib
+          must_run     contiglib CONTIGLIB_CLUSTER
+          must_not_run contiglib GENOMAD
+
+          run_mode all
+          must_run all RESULTS_TSE
+
+      - name: A mode that names no stage is rejected
+        run: |
+          if nextflow run main.nf -stub -profile test_stub --mode bogus \
+               --outdir output_stub_mode_bogus > mode_bogus.log 2>&1; then
+            echo "--mode bogus was accepted"; exit 1
+          fi
+          grep -q "not a valid choice" mode_bogus.log || \
+            { echo "rejected, but not by the schema"; cat mode_bogus.log; exit 1; }
+
+      - name: '--mode fastqc with --reads_type clean is rejected'
+        run: |
+          if nextflow run main.nf -stub -profile test_stub --mode fastqc --reads_type clean \
+               --outdir output_stub_mode_clean > mode_clean.log 2>&1; then
+            echo "the empty combination was accepted"; exit 1
+          fi
+          grep -q "has nothing to do with" mode_clean.log || \
+            { echo "rejected, but not for the expected reason"; cat mode_clean.log; exit 1; }
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stub-mode-logs
+          path: |
+            mode_*.log
+            .nextflow.log
