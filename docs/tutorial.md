@@ -146,7 +146,7 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 | `--input`  | :material-check: | NA       | Input samplesheet describing all the samples to be analysed |
 | `--outdir` | :material-check: | output  | Name of directory to store output values |
 | `--db` | :material-check: | ${HOME}/viroprofiler | Path containing required ViroProfiler databases |
-| `--mode` | :material-close: | all | Run mode: `setup`, `fastqc`, `fastp`, `contiglib`, or `all` |
+| `--mode` | :material-close: | all | Last stage to run. `setup` builds the databases and reads no samplesheet; the others are cumulative, so `contiglib` runs everything `fastp` runs and then assembles, cleans and dereplicates. `fastqc` and `fastp` are incompatible with `--reads_type clean`, which skips both |
 | `--input_contigs` | :material-close: | false | Path to pre-assembled contigs (skips assembly) |
 | `--single_end` | :material-close: | false | Set to `true` for single-end reads |
 | `--reads_type` | :material-close: | raw | Input reads type: `raw` or `clean` (skip trimming) |
@@ -163,7 +163,7 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 | `--use_decontam` | :material-close: | false | Remove host contamination from reads |
 | `--use_eggnog` | :material-close: | false | Use eggNOG-mapper for protein annotation |
 | `--use_kraken2` | :material-close: | false | Use Kraken2 for read classification |
-| `--use_phamb` | :material-close: | false | Use phamb for contig binning |
+| `--use_phamb` | :material-close: | false | Download the VOGDB and miComplete HMM sets that PHAMB's features are computed from. Only affects `--mode setup`; the binner itself is selected with `--binning` |
 
 
 ##### Other parameters
@@ -172,17 +172,16 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 | :--------------------------------------- | :------- | :------ | :---------- |
 | `--prot_cluster_min_similarity` | :material-close: | 0.7 | Minimum similarity of protein seqs in the same cluster |
 | `--prot_cluster_min_coverage` | :material-close: | 0.9 | Minimum similarity of protein seqs in the same cluster |
-| `--binning` | :material-close: | false | Which binning tool to use: `vrhyme` or `false`. `phamb` is no longer supported: its random forest reads DeepVirFinder's score table, which the pipeline no longer produces |
-| `--binning_minlen_contig` | :material-close: | 2000 | Contigs shorter than this value will not be used for binning |
-| `--binning_minlen_bin` | :material-close: | 2000 | Bins shorter than this value will be removed from downstream analyses |
+| `--binning` | :material-close: | false | Which binning tool to use: `vrhyme`, `phamb` or `false`. `phamb` is amd64-only, because it classifies VAMB's clusters and VAMB has no linux-aarch64 build; it is also approximate, because its random forest was fitted on DeepVirFinder scores and is fed geNomad's instead |
+| `--binning_minlen_contig` | :material-close: | 5000 | Contigs shorter than this value will not be used for binning |
+| `--binning_minlen_bin` | :material-close: | 5000 | Bins shorter than this value will be removed from downstream analyses |
 | `--genomad_preset` | :material-close: | "default" | geNomad post-classification filtering: `default`, `conservative` or `relaxed` |
 | `--genomad_splits` | :material-close: | 0 | Split geNomad's MMseqs2 marker search into this many chunks to cap memory use; 0 leaves it unsplit |
 | `--checkamg_min_weight` | :material-close: | 0.6 | Minimum CheckAMG AMG weight for an auxiliary gene to be reported; higher is more conservative |
 | `--virsorter2_groups` | :material-close: | "dsDNAphage" | Viral category detected by `VirSorter2`, could be any combination of `dsDNAphage,NCLDV,RNA,ssDNA,lavidaviridae` |
 | `--contig_minlen_vcontact3` | :material-close: | 10000 | Contigs/Bins short than this value will not be used in `vConTACT3` |
 | `--vcontact3_db_version` | :material-close: | 232 | vConTACT3 reference database version. Each vConTACT3 release accepts exactly one version |
-| `--taxa_db_source` | :material-close: | "NCBI" | Taxonomy database, could be either `NCBI` or `ICTV` |
-| `--replicyc` | :material-close: | "replidec" | Viral replication cycle prediction method, could be either `replidec` or `bacphlip` |
+| `--replicyc` | :material-close: | "bacphlip" | Viral replication cycle prediction method, could be either `replidec` or `bacphlip` |
 
 
 ##### Max job request options

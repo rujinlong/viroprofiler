@@ -14,7 +14,7 @@
 | DRAM          | Gene annotation                     | GPL v3      |
 | eggnog-mapper | Gene annotation                     | GPL v3      |
 | abricate      | Gene annotation                     | GPL v2      |
-| MMseqs2       | Taxonomy assignment                 | GPL v3      |
+| MMseqs2       | Sequence clustering and search      | GPL v3      |
 | vConTACT3     | Taxonomy assignment                 | GPL v3      |
 | VITAP         | Taxonomy assignment                 | GPL v3      |
 | Bacphlip      | Lifestyle prediction                | MIT License |

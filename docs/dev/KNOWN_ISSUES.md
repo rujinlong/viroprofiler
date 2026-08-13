@@ -16,10 +16,10 @@ usability defect · **P3** hygiene.
 | [I-05](#i-05) | P1 | Config — `params.tracedir` frozen to the default `outdir` | Fixed |
 | [I-06](#i-06) | P1 | Databases — iPHoP DB directory name hardcoded and stale | Fixed |
 | [I-07](#i-07) | P1 | Databases — Bracken/Kraken2 DB paths disagree | Fixed |
-| [I-08](#i-08) | P2 | Databases — NCBI taxonomy pinned to a 2022 archive snapshot | Open |
+| [I-08](#i-08) | P2 | Databases — NCBI taxonomy pinned to a 2022 archive snapshot | Fixed — its only consumer, the MMseqs2 LCA, was retired and `DB_VREFSEQ` deleted |
 | [I-09](#i-09) | P2 | Databases — VOGDB host renamed; plain-HTTP URL | Open |
 | [I-10](#i-10) | P2 | Databases — setup steps are not resumable and never verified | Open |
-| [I-11](#i-11) | P2 | Workflow — `--mode fastqc` / `fastp` / `contiglib` not honoured | Open |
+| [I-11](#i-11) | P2 | Workflow — `--mode fastqc` / `fastp` / `contiglib` not honoured | Fixed |
 | [I-12](#i-12) | P2 | Config — `docker.userEmulation` removed in modern Nextflow | Fixed |
 | [I-13](#i-13) | P3 | Repo — stub output directories committed despite `.gitignore` | Open |
 | [I-14](#i-14) | P3 | Docs — `CLAUDE.md` references an MCP server that is not part of the repo | Fixed |
@@ -44,6 +44,15 @@ usability defect · **P3** hygiene.
 | [I-33](#i-33) | P0 | Containers — `RESULTS_TSE` cannot read its own gzipped abundance inputs | Open |
 | [I-34](#i-34) | P2 | Modules — `-max_target_seqs` makes contig dereplication depend on library size | Fixed — BLAST chain replaced by Vclust |
 | [I-35](#i-35) | P3 | Modules — exact duplicate contigs entered the O(n²) dereplication stage | Fixed |
+| [I-36](#i-36) | P1 | Modules — `PHAMB_RF` calls a CLI the installed phamb does not have | Fixed |
+| [I-37](#i-37) | P0 | Containers — `run_RF.py` copied onto PATH cannot find its own model | Fixed |
+| [I-38](#i-38) | P0 | Containers — the binning image never installed VAMB | Fixed on amd64; VAMB has no aarch64 build |
+| [I-39](#i-39) | P1 | Containers — the binning image's second `vrhyme` prefix had drifted to Python 3.14 | Fixed |
+| [I-40](#i-40) | P2 | Modules — `VAMB` was given a depth table covering contigs its FASTA does not contain | Fixed |
+| [I-41](#i-41) | P3 | Config — `CONTIGLIB_CLUSTER` requested one CPU while Vclust threads every stage | Fixed |
+| [I-42](#i-42) | P0 | Containers — conda post-link scripts are not run by pixi, leaving a data package uninstalled | Fixed |
+| [I-43](#i-43) | P0 | Containers — the VAMB version pinned has no `--jgi`, the flag the process passes | Fixed |
+| [I-44](#i-44) | P1 | Modules — VAMB's `--jgi` pairs depths to contigs by row, not by name | Fixed |
 
 ---
 
@@ -179,11 +188,17 @@ process. Only reachable with `--use_kraken2 true`, hence P1 rather than P0.
 <a id="i-08"></a>
 ## I-08 — NCBI taxonomy pinned to the 2022-08-01 archive (P2)
 
-`DB_VREFSEQ` downloads
+`DB_VREFSEQ` downloaded
 `https://ftp.ncbi.nih.gov/pub/taxonomy/taxdump_archive/taxdmp_2022-08-01.zip`. The URL still
-resolves (HTTP 200 as of 2026-08-12), so this is not a dead link, but every ViroProfiler
-installation is silently frozen to a four-year-old taxonomy. Taxa described since 2022 —
-including the entire post-2022 ICTV phage reclassification — cannot be assigned.
+resolves (HTTP 200 as of 2026-08-12), so this was not a dead link, but every ViroProfiler
+installation was silently frozen to a four-year-old taxonomy. Taxa described since 2022 —
+including the entire post-2022 ICTV phage reclassification — could not be assigned.
+
+**Resolution.** The snapshot existed for one consumer: `mmseqs createtaxdb`, which built the
+LCA database `TAXONOMY_MMSEQS` searched. That module was the lowest-priority taxonomy source
+of four, behind VITAP, geNomad and vConTACT3, and it has been retired along with
+`DB_VREFSEQ`, `bin/parse_mmseqsTaxa.py` and `params.taxa_db_source`. VITAP and vConTACT3
+carry their own reference sets, so nothing in the pipeline reads an NCBI taxdump any more.
 
 <a id="i-09"></a>
 ## I-09 — VOGDB host renamed; URL is plain HTTP (P2)
@@ -221,12 +236,20 @@ Consequences:
 <a id="i-11"></a>
 ## I-11 — `--mode fastqc` / `fastp` / `contiglib` are not implemented (P2)
 
-`nextflow.config:15` and the documentation advertise
+`nextflow.config` and the documentation advertised
 `mode = ["setup", "fastqc", "fastp", "contiglib", "all"]`, but
-`workflows/viroprofiler.nf` only branches on `setup` and `all`. Any other value runs
-everything up to and including `CONTIGLIB_CLUSTER` and then silently stops, so
-`--mode fastqc` still runs assembly and CheckV. The advertised early-exit modes do not
-exist.
+`workflows/viroprofiler.nf` only branched on `setup` and `all`. Any other value ran
+everything up to and including `CONTIGLIB_CLUSTER` and then silently stopped, so
+`--mode fastqc` still ran assembly and CheckV. The schema also defaulted `mode` to `test`,
+a value the workflow never mentions.
+
+**Resolution.** The stages are numbered in `WorkflowViroprofiler.MODE_STAGE` and each block
+in the workflow is gated on that number, so a mode is a prefix of the pipeline rather than a
+branch. `--mode fastqc` now runs 3 processes, `fastp` 4, `contiglib` 8 and `all` 26 on the
+stub dataset. Reporting — `CUSTOM_DUMPSOFTWAREVERSIONS` and `MULTIQC` — runs in every mode,
+so a run stopped early still says what it did. `initialise()` rejects an unknown mode, and
+rejects `fastqc`/`fastp` together with `--reads_type clean`, which skips both stages and
+would otherwise produce an empty run.
 
 <a id="i-12"></a>
 ## I-12 — `docker.userEmulation` was removed from Nextflow (P2)
@@ -823,3 +846,229 @@ the 1600-sequence set above that removed 115 sequences (7 %) with no change to t
 The ids it drops are not lost: `vclust deduplicate` writes a `.duplicates.txt` companion file,
 and `bin/parse_vclust_clusters.py` reads it back so that every contig in the library still
 appears in `contigs_ANIclst.tsv` under the representative of its cluster.
+
+<a id="i-36"></a>
+## I-36 — `PHAMB_RF` calls a CLI the installed phamb does not have (P1)
+
+The process invoked
+
+```
+run_RF.py -f <contigs> -d <dvf> -p <micomplete> -g <vog> -c <clusters> \
+          -l <minlen> -m /opt/phamb/workflows/mag_annotation/dbs/RF_model.python39.sav \
+          -s <minbin> -o .
+```
+
+but the phamb the image installs takes four positional arguments and two options:
+
+```
+run_RF.py <fastafile> <clusterspath> <annotationdir> <directoryout> [-m MIN_BIN_SIZE] [-s SEPARATOR]
+```
+
+Every flag was wrong, and two were actively dangerous: `-m` had become an `int` minimum bin
+size and was being handed a filesystem path, while `-s` had become a binsplit separator and
+was being handed a size in bases. The model path did not exist either — phamb moved its
+`dbs/` from `workflows/mag_annotation/` into the package itself.
+
+The three annotation files are also not passed individually any more. `run_RF.py` looks them
+up by fixed name inside `annotationdir`: `all.DVF.predictions.txt`, `all.hmmVOG.tbl` and
+`all.hmmMiComplete105.tbl` — none of which matches what `MICOMPLETEDB` and `VOGDB` emit
+(`hmmMiComplete.tbl`, `hmmVOG.tbl`).
+
+**Resolution.** `PHAMB_RF` builds the annotation directory under the expected names and calls
+the current CLI. Nothing was passing before, so `--binning phamb` had been broken for longer
+than the missing DeepVirFinder table alone would explain.
+
+<a id="i-37"></a>
+## I-37 — `run_RF.py` copied onto PATH cannot find its own model (P0)
+
+`run_RF.py` loads the random forest from a path relative to its own source file:
+
+```python
+rf_model_file = Path(__file__).parent / "dbs/RF_model.python39.sav"
+```
+
+The binning Dockerfile did `cp /opt/phamb/phamb/*.py /opt/conda/bin/`, so the copy that PATH
+resolves has `__file__` in `/opt/conda/bin`, where there is no `dbs/`:
+
+```
+$ command -v run_RF.py               -> /opt/conda/bin/run_RF.py
+$ ls /opt/conda/bin/dbs/             -> No such file or directory
+$ ls /opt/phamb/phamb/dbs/           -> RF_model.python39.sav
+```
+
+`joblib.load` would therefore have failed with `FileNotFoundError` — after VAMB and both HMM
+searches had already run.
+
+**Resolution.** The image installs a wrapper at `/usr/local/bin/run_RF.py` that executes the
+file in its installed location, so `__file__` still resolves beside the model. The Dockerfile
+asserts both the script and the model exist, and the smoke test deserialises the forest.
+
+<a id="i-38"></a>
+## I-38 — The binning image never installed VAMB (P0)
+
+`vMAG_PHAMB` runs `VAMB` before `PHAMB_RF`, but `vamb` was not in `env_binning.yml` and not
+in the image:
+
+```
+$ apptainer exec viroprofiler-binning.sif vamb --version
+/bin/bash: line 1: vamb: command not found
+```
+
+So `--binning phamb` could not have worked on any architecture, independently of I-36 and
+I-37.
+
+**Resolution on amd64.** `vamb 4.1.3` is declared in `docker/viroprofiler-binning/pixi.toml`
+as a `linux-64`-only feature and installed when BuildKit's `TARGETARCH` is `amd64`.
+
+**Not resolvable on aarch64.** VAMB has no `linux-aarch64` artifact in any release line, and
+5.x depends on `pycoverm`, which has none either. `WorkflowViroprofiler.binningIsAvailable()`
+refuses `--binning phamb` on aarch64 at start-up rather than letting the run reach VAMB. See
+[ARM64.md](ARM64.md).
+
+<a id="i-39"></a>
+## I-39 — The binning image's second `vrhyme` prefix had drifted to Python 3.14 (P1)
+
+The image built two prefixes containing vRhyme: the base environment, and a separate
+`viroprofiler-vrhyme` one from `env_vrhyme.yml`. Only the base environment was on `PATH`, so
+the second was never used — and its unpinned solve had drifted far enough to stop working:
+
+```
+$ /opt/conda/envs/viroprofiler-vrhyme/bin/vRhyme --version
+  File "/opt/conda/envs/viroprofiler-vrhyme/bin/vRhyme", line 16, in <module>
+    import pkg_resources
+ModuleNotFoundError: No module named 'pkg_resources'
+```
+
+It had resolved to Python 3.14, numpy 2.4.6, pandas 3.0.5 and setuptools ≥81, which no longer
+ships `pkg_resources`. The vRhyme that VRHYME actually runs, from the base environment, was
+on Python 3.10 with scikit-learn 1.0.2 and works.
+
+**Resolution.** There is one environment now, `binning`, and `vrhyme` is declared in it —
+which is where the working executable always came from. Its Python and scikit-learn are
+pinned, the latter because PHAMB's forest is a joblib-serialised scikit-learn estimator and
+phamb's own `setup.py` requires exactly 1.0.2.
+
+<a id="i-40"></a>
+## I-40 — `VAMB` was given a depth table covering contigs its FASTA does not contain (P2)
+
+`vMAG_PHAMB` passes the viral subset as `--fasta` but the BAMs are mapped against the whole
+dereplicated library, and `jgi_summarize_bam_contig_depths` summarises whatever the BAMs
+contain. VAMB pairs `--jgi` with `--fasta` by row, so every contig after the first extra one
+would have been given another contig's abundance.
+
+The two `cut`/`paste` lines that preceded the filter were a no-op: `cut -f1-3` and
+`cut -f1-3 --complement` pasted back together reproduce the input table exactly.
+
+**Resolution.** The depth table is restricted to the names in the FASTA before the length
+filter is applied.
+
+<a id="i-41"></a>
+## I-41 — `CONTIGLIB_CLUSTER` requested one CPU while Vclust threads every stage (P3)
+
+`vclust deduplicate`, `prefilter`, `align` and `cluster` all take `-t $task.cpus`, and the
+process passed `task.cpus` to each of them, but `nextflow.config` requested
+`cpus = 1 * task.attempt`. The Kmer-db prefilter and the LZ-ANI alignment — the two stages
+that dominate the runtime — ran single-threaded.
+
+Memory was also sized for the viral subset rather than for what this process actually sees:
+it dereplicates the whole pooled contig library, because its output is the read-mapping
+reference for abundance.
+
+**Resolution.** 4 CPUs and 12 GB, both scaled by `task.attempt` and still bounded by
+`check_max`.
+
+<a id="i-42"></a>
+## I-42 — conda post-link scripts are not run by pixi (P0)
+
+`bioconductor-genomeinfodbdata` ships no R package. Its conda artifact contains exactly two
+files, both shell scripts:
+
+```
+$ python3 -c "import json; print(json.load(open('conda-meta/bioconductor-genomeinfodbdata-1.2.11-r43hdfd78af_1.json'))['files'])"
+['bin/.bioconductor-genomeinfodbdata-post-link.sh', 'bin/.bioconductor-genomeinfodbdata-pre-unlink.sh']
+
+$ cat bin/.bioconductor-genomeinfodbdata-post-link.sh
+#!/bin/bash
+installBiocDataPackage.sh "genomeinfodbdata-1.2.11"
+```
+
+The data package itself is downloaded and installed by that post-link script. micromamba runs
+post-link scripts; pixi does not, and says so only as a build-time notice. So the environment
+solved and installed cleanly while `GenomeInfoDb` — a dependency of every
+SummarizedExperiment package — could not be loaded, and `library(vpfkit)` failed with
+
+```
+Error in loadNamespace(i, ...) : there is no package called 'GenomeInfoDbData'
+ERROR: lazy loading failed for package 'vpfkit'
+```
+
+several layers below the package that was actually missing.
+
+**Resolution.** `docker/viroprofiler-viewer/Dockerfile` runs that one script explicitly and
+asserts the resulting directory exists, rather than setting `run-post-link-scripts insecure`,
+which would silently execute any post-link script any future dependency brings in. A second
+step fails the build if a package other than `bioconductor-genomeinfodbdata` ever ships one,
+so the next occurrence is found at build time rather than in a run.
+
+This is a general hazard of the micromamba-to-pixi move, not a defect in either tool: it is
+invisible in the solve, invisible in the lockfile, and only shows up when something tries to
+load the package.
+
+<a id="i-43"></a>
+## I-43 — the pinned VAMB has no `--jgi`, which is the flag the process passes (P0)
+
+`VAMB` runs
+
+```
+vamb --outdir out_vamb --fasta $contigs -m ... --jgi depth_clean.txt -o __ --minfasta ...
+```
+
+but the version first pinned in `docker/viroprofiler-binning/pixi.toml` was 4.1.3, and VAMB 4
+removed `--jgi` entirely. Its argument parser offers only `--bamfiles` and `--rpkm`; the word
+`jgi` does not appear anywhere in the 4.1.3 package. The process would have died on
+`unrecognized arguments: --jgi`.
+
+Nor is 4.x a matter of renaming the flag. It computes depths from BAMs itself and hashes the
+BAM reference names against the FASTA, refusing a mismatch — and this pipeline deliberately
+hands it a *viral subset* FASTA with BAMs mapped against the *whole* dereplicated library.
+VAMB 5 goes further and restructures the cluster file `phamb.vambtools.read_clusters` parses.
+
+**Resolution.** Pinned to `vamb 3.0.2`, the release PHAMB was developed against: it has
+`--jgi`, and its `write_clusters` emits the two-column `clustername<TAB>contigname` file phamb
+reads. It runs on Python 3.6, which is why it stays in its own pixi environment with its own
+solve group; the lockfile is what keeps a Python 3.6 environment installable at all.
+
+<a id="i-44"></a>
+## I-44 — VAMB's `--jgi` pairs depths to contigs by row, not by name (P1)
+
+`vamb.vambtools.load_jgi` discards the contig names:
+
+```python
+header = next(filehandle)
+...
+columns = tuple([i for i in range(3, len(fields)) if not fields[i].endswith("-var")])
+array = _np.loadtxt(filehandle, dtype=_np.float32, usecols=columns)
+return validate_input_array(array)
+```
+
+It returns an `N_contigs x N_samples` matrix that VAMB then pairs with `--fasta` **by row**.
+So the depth table must hold exactly the sequences of the FASTA, in exactly their order.
+Anything else silently gives each contig another contig's abundance, and the clustering is
+computed on the wrong numbers with no error anywhere.
+
+The process filtered the table with `csvtk grep -f contigName -P <list>`, which preserves the
+order of the *depth file* — the BAM reference order — not the order of the FASTA. Those two
+happen to agree today, because the viral subset is produced by `seqkit grep` from the same
+library the bowtie2 index was built from, and both preserve input order. That is a property
+of the tools involved, not a guarantee either makes.
+
+**Resolution.** The table is now built in FASTA order explicitly, by looking each sequence up
+by name, and two assertions follow it: a contig absent from the depth table is fatal (it would
+mean the BAMs were built against a different library), and the emitted row count must equal
+the number of FASTA sequences that pass VAMB's own `-m` length filter.
+
+Two related hardenings went in with it, neither of which had produced a wrong answer yet:
+`bin/genomad_to_dvf.py` now passes geNomad's score through as the source text rather than
+re-formatting it with `%.4f`, because PHAMB applies `round(x, 2)` to whatever it reads and
+0.00499 re-emitted as 0.0050 rounds to 0.01 instead of 0.00; and the vRhyme model download is
+checked against a pinned SHA-256 rather than trusted because its URL carries a commit.

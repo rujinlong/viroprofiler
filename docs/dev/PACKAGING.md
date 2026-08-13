@@ -1,7 +1,32 @@
 # Container Packaging
 
-How the 14 images in `docker/` should declare and freeze their dependencies, and what to do
-about VirSorter2.
+How the images in `docker/` declare and freeze their dependencies, and what to do about
+VirSorter2.
+
+## Where this stands
+
+Every image except `viroprofiler-host` is built by pixi from a committed `pixi.lock`. Each
+`docker/viroprofiler-*/` holds a `pixi.toml` stating the intent and a `pixi.lock` recording
+what was chosen; the Dockerfile installs with `pixi install --locked`, which fails the build
+if the two disagree, and ends with a smoke test under `env -i` — the environment
+`.command.sh` actually runs in.
+
+`viroprofiler-host` stays on micromamba. Its conda specs come from `iphop_environment.yml`
+inside the iPHoP fork's own checkout, so there is no manifest in this repository to lock, and
+the image is amd64-only in any case.
+
+The conda side is locked; four things deliberately are not, and carry their own pins in the
+Dockerfile that installs them:
+
+| Image | Outside the lock | Pinned by |
+|---|---|---|
+| `viroprofiler-geneannot` | `DRAM-bio` | `ARG DRAM_VERSION=1.4.6`, installed `--no-deps` |
+| `viroprofiler-checkamg` | torch, torch_scatter, checkamg | version ARGs; torch needs PyTorch's CPU index and torch_scatter needs `--no-build-isolation` |
+| `viroprofiler-vitap`, `viroprofiler-vcontact3` | the tools themselves | `ARG *_REF` commit SHAs |
+| `viroprofiler-viewer` | vpfkit | `ARG VPFKIT_REF`, a commit SHA rather than `main` |
+| `viroprofiler-binning` | phamb, the vRhyme model | a git rev in `[pypi-dependencies]`; `ARG VRHYME_REF` for the model |
+
+The rest of this document is why that shape was chosen, and what it does and does not buy.
 
 ## Recommendation
 
@@ -215,6 +240,14 @@ State these plainly so the lockfile is not oversold:
   does not make DRAM 1.4.6 stop importing `pkg_resources`.
 - **The base images.** `mambaorg/micromamba:1.5.8` and `ghcr.io/prefix-dev/pixi:0.73.0` are
   mutable tags. Pin them by `@sha256:` digest.
+- **Conda post-link scripts.** micromamba runs them, pixi does not, and the difference is
+  invisible in both the solve and the lockfile. `bioconductor-genomeinfodbdata` consists of
+  nothing *but* a post-link script that fetches the actual R data package, so the viewer image
+  installed cleanly and then could not load `GenomeInfoDb`
+  ([I-42](KNOWN_ISSUES.md#i-42)). Run the script explicitly in the Dockerfile and assert its
+  result; do not set `run-post-link-scripts insecure`, which turns every future dependency's
+  script into silent build-time code execution. A package whose conda artifact contains only
+  scripts is the signature to watch for.
 - **Databases.** The multi-gigabyte downloads in `modules/local/setup_db.nf` are unversioned and
   unverified ([I-08](KNOWN_ISSUES.md#i-08), [I-09](KNOWN_ISSUES.md#i-09),
   [I-10](KNOWN_ISSUES.md#i-10)). They are a larger reproducibility hole than the environments and
@@ -226,19 +259,18 @@ State these plainly so the lockfile is not oversold:
   image is currently built by CI at all, on either architecture. A lock that nothing verifies is
   a comment.
 
-## Migration sketch
+## The manifest shape
 
-Incremental, one image at a time. A pixi-built image and a micromamba-built image are
-indistinguishable to Nextflow, so `conf/modules.config` needs no coordinated change and the two
-styles can coexist indefinitely.
+A pixi-built image and a micromamba-built image are indistinguishable to Nextflow, so
+`conf/modules.config` needs no coordinated change and the two styles coexist — which is what
+lets `viroprofiler-host` stay behind.
 
-### Pilot: `viroprofiler-replicyc`
+### The pilot, and what it established: `viroprofiler-replicyc`
 
-The right pilot is the smallest image that exercises every risk at once, and that is
-`viroprofiler-replicyc`: two environments in one image, a custom channel (`denglab`), a
+The right pilot was the smallest image that exercises every risk at once:
+`viroprofiler-replicyc` has two environments in one image, a custom channel (`denglab`), a
 compatibility pin that was guessed from a traceback (`numpy<1.24`), and a `wget` of reference
-data in the Dockerfile that no lock will cover. It is also small enough to rebuild in under two
-minutes.
+data in the Dockerfile that no lock covers. It rebuilds in under a minute.
 
 `docker/viroprofiler-replicyc/pixi.toml` — one feature per current `env_*.yml`, one solve group
 each:
@@ -263,8 +295,8 @@ replidec = { features = ["replidec"], solve-group = "replidec" }
 bacphlip = { features = ["bacphlip"], solve-group = "bacphlip" }
 ```
 
-`pixi lock` then produces `pixi.lock`, which is committed. The Dockerfile keeps its present
-shape — the `ENV PATH` line survives verbatim apart from the prefix paths:
+`pixi lock` produces `pixi.lock`, which is committed. The Dockerfile keeps its previous shape
+— the `ENV PATH` line survives verbatim apart from the prefix paths:
 
 ```dockerfile
 FROM ghcr.io/prefix-dev/pixi:0.73.0@sha256:<digest>
@@ -288,9 +320,16 @@ CMD ["/bin/bash"]
 The Replidec database `wget` moves across unchanged, with `site-packages` located via the
 environment's own Python rather than a bare `python3`.
 
-### How to tell whether the pilot succeeded
+### How to tell whether a migrated image is correct
 
-Not "the image built". All five must hold:
+Not "the image built". All five must hold, and all five held for the pilot — bacphlip's
+predictions on four real phage genomes were byte-identical between the two builds, and
+Replidec's differed only in row order and in the last bit of one likelihood
+(max relative difference 2.06e-16), with every classification agreeing. The same comparison
+was later run on `viroprofiler-base`, the image the most processes share: CheckV's
+`quality_summary.tsv` and `checkv_qc_long.fasta`, and `CONTIGLIB_CLUSTER`'s
+`contigs_ANIclst.tsv`, were byte-identical between a micromamba-image run and a pixi-image
+run of the same two samples.
 
 1. **`pixi lock --check --dry-run` is clean** in CI on both platforms — the committed lock
    matches the manifest, and `pixi install --locked` in the Dockerfile refuses to build if it
@@ -309,28 +348,36 @@ Not "the image built". All five must hold:
    the two builds. This is the property being bought, so it should be the property that is
    tested.
 
-### Order for the rest
+### What the migration turned up
 
-1. `viroprofiler-replicyc` — the pilot.
-2. `viroprofiler-abundance`, `viroprofiler-bracken`, `viroprofiler-qc`, `viroprofiler-vibrant` —
-   single environment, no in-Dockerfile installs, both platforms. Mechanical.
-3. `viroprofiler-taxa`, `viroprofiler-virsorter2` — single environment, guessed compatibility
-   pins that the lock now makes concrete.
-4. `viroprofiler-base` — three environments, and the template for the multi-prefix `ENV PATH`.
-5. `viroprofiler-geneannot` — three environments plus the DRAM PyPI install. The `--no-deps`
-   question above must be answered here.
-6. `viroprofiler-binning` — phamb from git moves into the lock as a PyPI git source.
-   `docker/viroprofiler-phamb/` should be deleted rather than migrated: no label, config or
-   script in this repository refers to it, and `viroprofiler-binning` already provides phamb.
-7. `viroprofiler-viewer` — R only. Low value: pixi locks the conda side, but vpfkit still comes
-   from `remotes::install_github`. Pin `VPFKIT_REF` to a SHA whether or not this image migrates.
-8. `viroprofiler-dvf`, `viroprofiler-host` — last, and only if they survive the VirSorter2 and
-   arm64 decisions at all. Both are linux-64 only and should say so via a feature-level
-   `platforms = ["linux-64"]`.
+Three of the fifteen images needed more than a mechanical translation, and in each case the
+lock is what made the problem visible:
+
+- **`viroprofiler-binning`.** Its second `vrhyme` prefix had drifted to Python 3.14, where
+  `vRhyme` no longer starts — and had never been on `PATH`, so nothing noticed
+  ([I-39](KNOWN_ISSUES.md#i-39)). There is one environment now. phamb's PyPI metadata
+  requires `scikit-learn==1.0.2` exactly, which the conda solve has to agree with rather than
+  fight; declaring it is also correct on its own terms, because PHAMB's forest is a
+  joblib-serialised estimator of that version. VAMB is a `linux-64`-only feature.
+- **`viroprofiler-base`.** `prodigal-gv` and `hmmsearch` are declared nowhere: GENEPRED,
+  MICOMPLETEDB and VOGDB call them by bare name and get CheckV's copies. The manifest records
+  that, and the smoke test asserts which prefix they resolve from, because adding them to the
+  base feature would silently take over CheckV's own internal calls too. The `virsorter2`
+  environment in this image has no consumer — every process that runs VirSorter2 carries the
+  `viroprofiler_virsorter2` label — and is kept only so that this migration changed packaging
+  and nothing else. Removing it is a separate decision worth about 1 GB.
+- **`viroprofiler-geneannot`.** The `--no-deps` question is answered by keeping `--no-deps`:
+  pixi.lock already provides a dependency set that solves on both platforms, and letting pip
+  resolve DRAM's requirements would pull PyPI copies over conda ones.
+
+`docker/viroprofiler-phamb/` was deleted rather than migrated: no label, config or script
+referred to it, and `viroprofiler-binning` provides phamb.
 
 Restoring the `.github/workflows/docker.yml` matrix, with `pixi lock --check --dry-run` as a
-gate, is a prerequisite for any of this to hold. Locking without CI verification only moves the
-drift from build time to the next person who runs `pixi lock`.
+gate, is what makes the lock mean anything on someone else's machine. Locking without CI
+verification only moves the drift from build time to the next person who runs `pixi lock`.
+Note the trap, verified in the appendix: plain `pixi lock --check` exits non-zero on drift but
+*rewrites* `pixi.lock` while doing so.
 
 ## VirSorter2: fork, freeze, or replace?
 

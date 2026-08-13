@@ -144,11 +144,6 @@ process {
         memory = "100 GB"
     }
 
-    withName: TAXONOMY_MMSEQS {
-        cpus = 4
-        memory = "120 GB"
-    }
-
     withName: VIRALHOST_IPHOP {
         cpus = 12
         memory = "300 GB"

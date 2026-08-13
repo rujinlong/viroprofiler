@@ -42,7 +42,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 2. Dereplication
 3. Contig quality evaluation and provirus detection ([`CheckV`](https://bitbucket.org/berkeleylab/checkv))
 4. Contig clustering based on ANI
-5. Binning (optional, using Phamb or vrhyme)
+5. Binning (optional, using PHAMB or vRhyme)
 6. Abundance estimation
 7. Viral sequence identification (VirSorter2, VIBRANT, DeepVirfinder)
 8. Functional annotation
@@ -82,7 +82,7 @@ The long contig library is then dereplicated with [Vclust](https://github.com/re
 
 The representative contig of each cluster — the longest member — is merged into a non-redundant contig library (nrclib), and used for downstream annotation and analysis. This step is to reduce the computational cost of downstream analysis. `contigs_ANIclst.tsv` maps every contig in the library to the representative of its cluster.
 
-### Binning (optional, using Phamb or vrhyme)
+### Binning (optional, using PHAMB or vRhyme)
 
 The representative contigs of each cluster can be binned into viral MAGs using [phamb](https://github.com/RasmussenLab/phamb) or [vRhyme](https://github.com/AnantharamanLab/vRhyme).
 
@@ -106,18 +106,20 @@ Protein sequences of viruses are annotated using multiple tools and databases (D
 
 ### Taxonomy assignment
 
-Taxonomy is assigned by two independent callers and then merged. vConTACT3 clusters
-the contigs with a reference set by gene sharing and predicts a lineage from realm down
-to genus for each cluster; the MMseqs2 taxonomy module assigns a per-contig LCA against
-a customized viral database built from NCBI RefSeq viral sequences, which reaches species
-but is noisier. `merge_taxonomy.py` resolves the two rank by rank, taking the
-highest-priority caller that made a call at that rank -- vConTACT3 first, MMseqs2 second.
+Taxonomy is assigned by two independent callers and then merged. VITAP scores each contig
+against ICTV reference genomes on a multipartite graph and is the only caller here that
+reaches species; vConTACT3 clusters the contigs with a reference set by gene sharing and
+predicts a lineage from realm down to genus for each cluster. `merge_taxonomy.py` resolves
+the two rank by rank, taking the highest-priority caller that made a call at that rank --
+VITAP first, vConTACT3 second -- and skipping a caller at the ranks below any disagreement
+with the lineage already resolved above it, so a merged lineage cannot contradict itself.
 
 The merged table is `taxonomy/taxonomy.tsv`: one row per contig, one column per rank
 (`Realm` ... `Species`), and beside each rank a `<Rank>_source` column naming the caller
 the value came from. Ranks vConTACT3 labelled as de novo clusters keep its
 `novel_<rank>_<n>_of_<parent>` labels, which are stable per cluster and cannot be
-confused with ICTV names. ViroProfiler also supports the ICTV viral taxonomy nomenclature
+confused with ICTV names. `taxonomy/taxonomy_tse.tsv` carries the same lineages in the layout `RESULTS_TSE` reads.
+ViroProfiler also supports the ICTV viral taxonomy nomenclature
 via a separate database built from ICTV sequences and annotations. Results are saved to
 the `taxonomy` folder.
 

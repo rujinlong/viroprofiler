@@ -40,8 +40,11 @@ closure in `nextflow.config`. If entries under it are symlinks pointing elsewher
 targets with `--container_binds a,b,c` — Nextflow runs Apptainer with `--no-home`, so nothing
 outside the work directory is visible unless bound.
 
-`--mode` accepts `setup` and `all` (default). `fastqc`, `fastp` and `contiglib` appear in the
-schema but are not implemented; anything other than `setup` currently runs the full pipeline.
+`--mode` names the last stage to run. `setup` builds databases and reads no samplesheet; the
+rest are cumulative — `fastqc` → `fastp` → `contiglib` → `all` (default), each running every
+earlier stage. `fastqc` and `fastp` are rejected together with `--reads_type clean`, which
+skips both. Stage numbering lives in `WorkflowViroprofiler.MODE_STAGE`, which is also what
+validates the mode.
 
 Container profiles: `docker`, `singularity`, `apptainer`, `podman`, `shifter`, `charliecloud`.
 On aarch64 add `arm64_local`, which points at locally built SIFs — the published images are
@@ -67,7 +70,7 @@ INPUT_CHECK (samplesheet CSV)
      |- Abundance: CONTIGINDEX -> MAPPING2CONTIGS2 -> ABUNDANCE
      |- Viral detection: GENOMAD [+ VIBRANT] + CheckV quality -> VIRCONTIGS_PRE
      |  [-> binning] -> VIRSORTER2 [-> DRAMV], and CHECKAMG on the candidate viruses
-     |- Taxonomy: TAXONOMY_VITAP + TAXONOMY_VCONTACT3 + TAXONOMY_MMSEQS -> TAXONOMY_MERGE
+     |- Taxonomy: TAXONOMY_VITAP + TAXONOMY_VCONTACT3 -> TAXONOMY_MERGE
      |- Host prediction: VIRALHOST_IPHOP
      |- Replication cycle: BACPHLIP or REPLIDEC
   -> RESULTS_TSE (final R object)
@@ -79,7 +82,7 @@ INPUT_CHECK (samplesheet CSV)
 - `modules/local/` — Custom processes grouped by function (viral_detection.nf, taxonomy.nf, abundance.nf, annotation.nf, etc.). Process names are ALL_CAPS.
 - `modules/nf-core/modules/` — vendored nf-core processes (FASTQC, FASTP, SPADES, BBMAP, MULTIQC,
   CUSTOM_DUMPSOFTWAREVERSIONS), pinned to 2022 releases.
-- `subworkflows/local/` — Composite workflows: `input_check.nf` (CSV parsing), `init.nf` (database setup), `vMAG.nf` (viral MAG binning via PHAMB or VRhyme).
+- `subworkflows/local/` — Composite workflows: `input_check.nf` (CSV parsing), `init.nf` (database setup), `vMAG.nf` (viral MAG binning via PHAMB or vRhyme).
 
 ### Configuration Layering
 
@@ -99,14 +102,22 @@ One image per functional group, built from `docker/` subdirectories and publishe
 maps the same labels to local SIFs, and additionally redirects the vendored nf-core modules,
 whose `quay.io/biocontainers` images are amd64 only, to `viroprofiler-qc`.
 
-`docker/viroprofiler-phamb/` is not referenced by any label — PHAMB ships inside
-`viroprofiler-binning`. Build with `bash docker/build_arm64.sh [name ...]`.
+PHAMB ships inside `viroprofiler-binning`. Build with `bash docker/build_arm64.sh [name ...]`.
+
+Every image except `viroprofiler-host` declares its conda dependencies in a `pixi.toml` and
+installs from a committed `pixi.lock`, so a rebuild cannot silently resolve a different
+package set. `pixi install --locked` fails the build when the two disagree. Re-lock
+deliberately and re-test; gate CI on `pixi lock --check --dry-run`, never plain `--check`,
+which rewrites the lockfile while exiting non-zero. `viroprofiler-host` stays on micromamba:
+its environment file comes from the iPHoP fork's own checkout, which no lockfile here can
+cover. See [docs/dev/PACKAGING.md](docs/dev/PACKAGING.md).
 
 ### Helper Scripts
 
 `bin/` contains the Python/R/shell scripts called by processes (e.g., `run_checkv.sh`,
-`parse_mmseqsTaxa.py`, `merge_taxonomy.py`, `genomad_contig_table.py`,
-`parse_vclust_clusters.py`, `create_tse.r`).
+`merge_taxonomy.py`, `genomad_contig_table.py`, `genomad_to_dvf.py`,
+`parse_vclust_clusters.py`, `create_tse.r`). They must be executable: Nextflow puts `bin/`
+on PATH but does not chmod anything.
 
 ### Groovy Libraries
 
@@ -116,9 +127,22 @@ whose `quay.io/biocontainers` images are amd64 only, to `viroprofiler-qc`.
 
 Optional modules controlled by `use_*` flags: `use_dram` (true), `use_iphop` (true), `use_vitap` (true), `use_checkamg` (true), `use_vibrant` (true), `use_eggnog` (false), `use_kraken2` (false), `use_phamb` (false), `use_abricate` (false), `use_decontam` (false).
 
-Taxonomy sources are merged by `bin/merge_taxonomy.py`, which resolves each rank independently from ranked `--source NAME PRIORITY FILE` triples (smaller priority wins): VITAP 1, geNomad 2, vConTACT3 3, MMseqs2 4.
+Taxonomy sources are merged by `bin/merge_taxonomy.py`, which resolves each rank independently
+from ranked `--source NAME PRIORITY FILE` triples (smaller priority wins): VITAP 1, vConTACT3 3.
+Priority 2 is reserved for geNomad. It writes two tables: `taxonomy.tsv`, every rank with the
+source that filled it, and `taxonomy_tse.tsv`, the same lineages in the layout vpfkit's
+`read_taxonomy2()` requires — where `Domain` carries the ICTV realm, or the literal `Viruses`
+for a contig placed at a lower rank only, because `create_vpftse_vir()` reads a non-missing
+`Domain` as one of the votes that make a contig viral.
 
-Binning: `params.binning` = false | "vrhyme". `"phamb"` errors out — PHAMB's random forest reads DeepVirFinder's score table, which the pipeline no longer produces.
+Binning: `params.binning` = false | "vrhyme" | "phamb". PHAMB is amd64-only — it classifies
+VAMB's clusters and VAMB has no linux-aarch64 build — and
+`WorkflowViroprofiler.binningIsAvailable()` refuses it on aarch64 before any process is
+submitted. PHAMB's random forest reads a per-contig virus score in DeepVirFinder's format;
+`PHAMB_DVF_TABLE` supplies geNomad's scores in that layout, which is the same range and the
+same slot but not the distribution the forest was fitted on, so its bin calls are approximate.
+`bin/genomad_to_dvf.py` states the limitation in full. `--binning vrhyme` needs no such caveat
+and is the only binner available on aarch64.
 
 Detection vs. downstream tools: geNomad, CheckV quality and (optionally) VIBRANT are the detectors whose union `VIRCONTIGS_PRE` forms. VirSorter2 is **not** a detector here — it runs on the already-selected candidates to produce `viral-affi-contigs-for-dramv.tab`, without which `DRAM-v.py distill` raises `KeyError` on the missing `auxiliary_score` column.
 
@@ -137,7 +161,14 @@ They are not style preferences.
   against a real product.
 - **Loosening a version pin on a 2022-era tool is an untested environment, not an upgrade.**
   Unpinned solves reach Python 3.14, setuptools 84, snakemake 8, numpy 1.24, scipy 1.15 and
-  pandas 3, each of which breaks at least one tool here. See [docs/dev/PACKAGING.md](docs/dev/PACKAGING.md).
+  pandas 3, each of which breaks at least one tool here. The images install from committed
+  lockfiles for this reason. See [docs/dev/PACKAGING.md](docs/dev/PACKAGING.md).
+- **A clean solve is not a working environment.** Some conda packages ship only a post-link
+  script that fetches what they nominally provide; micromamba runs those, pixi does not, and
+  the difference appears in neither the solve nor the lockfile. Every Dockerfile therefore
+  ends with a smoke test that exercises the tools under `env -i` with the image's own PATH —
+  the environment `.command.sh` actually runs in. A smoke test that searches a different PATH
+  than the image exports proves nothing about the image.
 - **Treat a subagent or Codex finding as a lead, not a fact.** Verify against the code first.
 
 Current state, open work and what has *not* been verified: [docs/HANDOFF.md](docs/HANDOFF.md).

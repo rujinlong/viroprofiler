@@ -8,12 +8,13 @@ Companion documents: [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md) (every defect found,
 ## Where the pipeline stands
 
 The pipeline runs end to end and produces a TreeSummarizedExperiment. On a two-sample test
-(HT02, UC20) from a cold start with no resume cache: 29 processes, 0 failures, and a viral
-TSE of 18 contigs × 2 samples with `counts`, `tpm`, `tmm` and `covfrac` assays and 37
-`rowData` columns.
+(HT02, UC20) from a cold start with no resume cache, on aarch64 with the pixi-built images
+and `--use_dram false`: 28 processes, 0 failures, and a viral TSE of 18 contigs × 2 samples
+with `counts`, `tpm`, `tmm` and `covfrac` assays and 37 `rowData` columns. Sixteen of those
+contigs carry a merged lineage, assembled from VITAP and vConTACT3.
 
-That is a low bar in absolute terms — two samples, 23 contigs — but it is the first complete
-run this repository has produced: before this work, no `.rds` existed anywhere in the tree.
+That is a low bar in absolute terms — two samples, 22 contigs in the dereplicated library —
+but it is the shape every change here is measured against.
 
 Everything below is committed on `dev_ru` and **not pushed**, so that it can be squash-merged
 into `main`.
@@ -35,15 +36,15 @@ flowchart TD
     GN --> VP[VIRCONTIGS_PRE<br/>union of candidates]
     VB --> VP
     CV --> VP
+    VP -.->|--binning| BIN[vMAG_VRHYME<br/>or vMAG_PHAMB<br/>amd64 only]
     VP --> VS2[VIRSORTER2]
+    BIN -.-> VS2
     VS2 --> DRAMV[DRAMV]
     VP --> CAMG[CHECKAMG]
     VP --> TX1[TAXONOMY_VITAP]
     VP --> TX2[TAXONOMY_VCONTACT3]
-    VP --> TX3[TAXONOMY_MMSEQS]
     TX1 --> TM[TAXONOMY_MERGE]
     TX2 --> TM
-    TX3 --> TM
     VP --> HOST[VIRALHOST_IPHOP]
     VP --> LIFE[BACPHLIP / REPLIDEC]
     AB --> TSE[RESULTS_TSE]
@@ -72,6 +73,7 @@ through the `arm64_local` profile:
 ```bash
 nextflow run main.nf \
   -profile apptainer,arm64_local -resume \
+  --sif_dir ~/singularity/viroprofiler-pixi \
   --input samplesheet.csv \
   --db /mnt/scratch/db/viroprofiler \
   --container_binds /home/allen/data2/db,/mnt/nas26/db,/home/allen/bioinfo/models \
@@ -95,13 +97,22 @@ Databases live at `/mnt/scratch/db/viroprofiler`:
 |---|---|---|
 | `dram` | 38 GB | local |
 | `vibrant` | 11 GB | local |
-| `taxonomy` (mmseqs vRefSeq + taxdump) | 3.4 GB | local |
 | `vitap` | 1.3 GB | local |
 | `checkv`, `virsorter2`, `genomad`, `eggnog` | — | symlinks into `~/data2/db` |
 | `vcontact3`, `checkamg` | — | symlinks into `/mnt/nas26/db` |
 
-SIFs are in `~/singularity/viroprofiler/`, rebuilt with `bash docker/build_arm64.sh <name>`.
-`viroprofiler-taxa.sif` there is a leftover of the retired vConTACT2 image and can be deleted.
+The `taxonomy/` tree there — the MMseqs2 vRefSeq database and the 2022 NCBI taxdump, 3.4 GB —
+has no consumer any more and can be deleted.
+
+SIFs live in two directories on this host. `~/singularity/viroprofiler-pixi/` holds the
+current, pixi-built set and is what `--sif_dir` above points at;
+`~/singularity/viroprofiler/` holds the previous micromamba-built set, kept as a fallback
+while the new images are still new. `viroprofiler-taxa.sif` in the older directory is a
+leftover of the retired vConTACT2 image and can be deleted.
+
+`bash docker/build_arm64.sh <name>` rebuilds one image; `SIF_DIR=<path>` chooses where the
+SIFs go, and defaults to `~/singularity/viroprofiler`. Once the pixi images have been used
+for a while, replace the older set and drop the `--sif_dir` override.
 
 ## Verification discipline
 
@@ -126,30 +137,41 @@ repository and stayed invisible for years.
 - **A subagent or Codex finding is a lead, not a fact.** Of fifteen Codex findings across this
   work, seven survived verification. Check each against the code before acting.
 
+## How the images are built
+
+Every image except `viroprofiler-host` is built by pixi from a committed lockfile:
+`docker/viroprofiler-*/pixi.toml` states the intent, `pixi.lock` records what was chosen, and
+`pixi install --locked` fails the build if the two disagree. Each Dockerfile ends with a smoke
+test under `env -i` — the environment `.command.sh` actually runs in — so a tool that is
+importable but not on `PATH` fails at build time rather than mid-run.
+
+Re-lock deliberately and re-test; a lock refreshed as a side effect of a rebuild is exactly
+the failure mode it exists to prevent. In CI gate on `pixi lock --check --dry-run`: plain
+`--check` exits non-zero on drift but rewrites `pixi.lock` while doing so.
+
+`viroprofiler-host` stays on micromamba because its conda specs live in the iPHoP fork's own
+checkout, and it is amd64-only in any case. Reasoning and per-image notes:
+[PACKAGING.md](dev/PACKAGING.md).
+
 ## Not done yet
 
 Ordered by how much they change results.
 
-1. **Migrate the images to pixi.** Recommendation and evidence in
-   [PACKAGING.md](dev/PACKAGING.md); start with `viroprofiler-replicyc` as a pilot. The
-   ad-hoc pins now scattered through `docker/*/env_*.yml` (`python=3.10`, `setuptools<81`,
-   `numpy<1.24`, `scipy<1.11`, `pandas<2`) are guesses that will rot again. Note the CI trap:
-   `pixi lock --check` rewrites `pixi.lock` despite exiting 1, so gate on
-   `--check --dry-run`.
-2. **Push the five new images to Docker Hub**: `vcontact3`, `vclust`, `vitap`, `genomad`,
-   `checkamg`. `conf/modules.config` already references tags that exist only as local arm64
-   SIFs, so every profile other than `arm64_local` is currently broken.
-3. **Decide whether mmseqs LCA taxonomy stays.** It is priority 4 behind VITAP, geNomad and
-   vConTACT3, and it is the only remaining consumer of the NCBI taxdump pinned to the
-   2022-08-01 archive ([I-08](dev/KNOWN_ISSUES.md)).
-4. **Implement or drop `--mode fastqc` / `fastp` / `contiglib`.** All three are advertised in
-   the parameter schema and the docs; only `setup` and `all` branch on anything
-   ([I-11](dev/KNOWN_ISSUES.md)).
-5. **Give `CONTIGLIB_CLUSTER` a resource label.** It still requests one CPU by default;
-   Vclust's `-t $task.cpus` is wired and idle.
-6. **Restore PHAMB binning or remove it.** `--binning phamb` now errors: PHAMB's random forest
-   reads DeepVirFinder's score table, which no longer exists.
-7. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md), including the committed
+1. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
+   local SIFs — `vcontact3`, `vclust`, `vitap`, `genomad`, `checkamg` were never published,
+   and the rest now differ from what is published — so every profile other than `arm64_local`
+   is currently broken. This is the last step before anyone else can run the pipeline.
+2. **Run on amd64.** Nothing here has been built or run on x86-64. `--binning phamb` and
+   `--use_iphop` in particular have *no* aarch64 execution path at all, so their first real
+   test will be that run.
+3. **Restore the `.github/workflows/docker.yml` build matrix**, with
+   `pixi lock --check --dry-run` as a gate. Every entry is commented out, so no image is built
+   by CI on either architecture, and a lockfile nothing verifies is a comment.
+4. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
+   process reads it — everything that runs VirSorter2 carries the `viroprofiler_virsorter2`
+   label and gets its own image — and it is worth about 1 GB. It was left in place so that the
+   pixi migration changed packaging and nothing else.
+5. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md), including the committed
    `output_stub*` directories and the literal `${HOME}` in `assets/samplesheet_contigs.csv`.
 
 ## Limits of what has been verified
@@ -160,6 +182,14 @@ Ordered by how much they change results.
   matters most for the `-max_target_seqs` truncation the switch was meant to fix, since that
   defect only manifests on libraries large enough to trigger it.
 - **Nothing has been built or run on amd64.** Every image was built natively on aarch64.
+- **`--binning phamb` has never been executed.** Its topology is exercised by the stub, the
+  score-table converter is checked against phamb's own parser, and the image asserts the
+  random forest deserialises — but VAMB has no aarch64 build, so the path itself has not run
+  end to end anywhere. Treat the first amd64 run as its first test.
+- **PHAMB's bin calls are approximate by construction.** Its forest was fitted on
+  DeepVirFinder's score distribution and is given geNomad's. The two scores share a range and
+  a meaning but not a calibration, and the size of the disagreement has not been measured.
+  `--binning vrhyme` carries no such caveat.
 - **iPHoP and DeepVirFinder cannot run on this host at all** — see
   [ARM64.md](dev/ARM64.md) for the evidence. `use_iphop` is false in the arm64 profile, so
   host prediction is unexercised here.
@@ -168,3 +198,10 @@ Ordered by how much they change results.
   against real databases in both directions, but the download and publish steps were not.
 - **`DRAM-setup.py prepare_databases` with `--use_uniref` was never attempted** (hundreds of
   GB); the pipeline builds with `--skip_uniref`.
+- **Two of the pixi-built images have been compared against their micromamba predecessors on
+  real data**, and both matched: `viroprofiler-replicyc` (bacphlip byte-identical on four
+  phage genomes; Replidec identical in every classification, differing only in row order and
+  the last bit of one likelihood) and `viroprofiler-base` (CheckV's `quality_summary.tsv` and
+  `checkv_qc_long.fasta`, and the contig-library clustering, all byte-identical on the
+  two-sample dataset). The remaining images are verified by their build-time smoke tests and
+  by having run in the end-to-end test, not by output comparison against the old images.

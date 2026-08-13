@@ -10,8 +10,9 @@ nextflow run main.nf -profile apptainer,arm64_local --input samplesheet.csv --db
 ```
 
 `docker/build_arm64.sh` covers `base`, `qc`, `abundance`, `replicyc`, `vibrant`, `bracken`,
-`virsorter2`, `vcontact3`, `vitap`, `geneannot`, `binning` and `viewer`. Two images are
-missing from that list on purpose: they cannot be built for `linux-aarch64` at all.
+`virsorter2`, `vcontact3`, `vclust`, `vitap`, `genomad`, `checkamg`, `geneannot`, `binning`
+and `viewer`. One image is missing from that list on purpose — `host`, which cannot be built
+for `linux-aarch64` at all — and one tool inside `binning` is likewise unavailable here.
 
 `vcontact3` is buildable here only because it does not come from conda: `fastcluster` and
 `jenkspy` have no `linux-aarch64` conda build, so `pixi global install -c bioconda vcontact3`
@@ -123,9 +124,50 @@ recorded in `docker/viroprofiler-checkamg/Dockerfile`: `torch_scatter` publishes
 wheel and compiles from its sdist, and its `setup.py` imports torch at build time, so torch
 has to be installed before CheckAMG and the compile has to run with `--no-build-isolation`.
 
-**Consequence for PHAMB.** `run_RF.py` reads DeepVirFinder's per-contig score table
-directly, and PHAMB's random forest was trained on it. `--binning phamb` therefore now
-exits with an error rather than being fed a substitute; `--binning vrhyme` is unaffected.
+**Consequence for PHAMB.** `run_RF.py` reads a per-contig virus score in DeepVirFinder's
+format. `PHAMB_DVF_TABLE` writes geNomad's scores in that layout, so the missing score table
+is no longer what stops PHAMB here — VAMB is. See the next section.
+
+## `--binning phamb` — VAMB
+
+PHAMB classifies VAMB's clusters, and VAMB has no `linux-aarch64` artifact in any release
+line:
+
+| VAMB | bioconda subdirs | Blocker on aarch64 |
+|---|---|---|
+| 2.0.1 – 4.1.3 | `linux-64`, `osx-64` | compiled package, never built for aarch64 |
+| 5.0.3, 5.0.4 | `noarch` | requires `pycoverm`, published for `linux-64`, `osx-64`, `osx-arm64` only |
+
+```bash
+python3 -c "
+import json, urllib.request, collections
+for p in ['vamb', 'pycoverm']:
+    d = json.load(urllib.request.urlopen('https://api.anaconda.org/package/bioconda/' + p))
+    print(p, dict(collections.Counter(f['attrs'].get('subdir') for f in d['files'])))
+"
+# vamb     {'linux-64': 14, 'osx-64': 14, 'noarch': 2}
+# pycoverm {'linux-64': 4, 'osx-arm64': 4, 'osx-64': 4}
+```
+
+`docker/viroprofiler-binning/pixi.toml` therefore declares `[feature.vamb] platforms =
+["linux-64"]`, and the Dockerfile installs that environment only when BuildKit's
+`TARGETARCH` is `amd64`. The image still builds on aarch64 and still provides vRhyme and
+PHAMB's scoring code — it simply has no clusterer for PHAMB to classify.
+
+`WorkflowViroprofiler.binningIsAvailable()` refuses `--binning phamb` on aarch64 at
+start-up, so the run fails in a second with an explanation instead of hours later on
+`vamb: command not found`. It reads the architecture Nextflow itself runs on, which is exact
+for a local executor and a guess on a heterogeneous cluster.
+
+**`--binning vrhyme` is unaffected** and is the binner to use on aarch64.
+
+The version pinned is 3.0.2, and that is a compatibility choice rather than a platform one.
+VAMB 4 removed `--jgi` outright — it takes only `--bamfiles` or a `.npz`, and hashes the BAM
+reference names against the FASTA, so it cannot be handed a contig subset with BAMs mapped
+against the full library, which is exactly this pipeline's arrangement. VAMB 5 additionally
+renamed and restructured the cluster file PHAMB's `read_clusters` parses. 3.0.2 is the
+release PHAMB was developed against; it runs on Python 3.6, which is why it lives in its own
+pixi environment and why the lockfile matters for keeping it installable.
 
 ## Re-checking these constraints
 
@@ -133,8 +175,11 @@ Package availability changes; both checks are cheap and need no aarch64 hardware
 `--platform` makes the solver work cross-platform.
 
 ```bash
-# conda side (swap in either environment file)
-docker run --rm -v "$PWD/docker/viroprofiler-dvf/env_dvf.yml:/tmp/e.yml:ro" \
+# conda side. Every image except `host` now declares its platforms in a pixi manifest, so
+# `pixi lock` reports an unsatisfiable platform at lock time rather than at build time:
+#     x failed to solve requirements of environment 'vamb' for platform 'linux-aarch64'
+# For `host`, whose environment file comes from the iPHoP checkout, use micromamba:
+docker run --rm -v "$PWD/iphop_environment.yml:/tmp/e.yml:ro" \
     mambaorg/micromamba:1.5.8 \
     micromamba create --dry-run --platform linux-aarch64 -n t -f /tmp/e.yml -y
 

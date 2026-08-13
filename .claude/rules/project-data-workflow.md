@@ -5,13 +5,16 @@
 
 ## Database Directory
 - Default: `$HOME/viroprofiler/`
-- Subdirectories per tool: `checkv/`, `virsorter2/`, `dram/`, `iphop/`, `vibrant/`, `vrefseq/`, `kraken2/`, `phamb/`, `eggnog/`
+- Subdirectories per tool: `checkv/`, `virsorter2/`, `genomad/`, `checkamg/`, `dram/`, `iphop/`, `vibrant/`, `vitap/`, `vcontact3/`, `kraken2/`, `vogdb/`, `micomplete/`, `eggnog/`
 - Setup via `--mode setup`
 
 ## Container Images
 - Published under `denglab/` on Docker Hub
-- 11 functional groups defined in `conf/modules.config`
+- 15 functional groups defined in `conf/modules.config`
 - Built from `docker/` subdirectories
+- Every image except `viroprofiler-host` installs from a committed `pixi.lock`; re-lock
+  deliberately and re-test, and gate CI on `pixi lock --check --dry-run` (plain `--check`
+  rewrites the lockfile while exiting non-zero)
 
 ## Output Structure
 - Default output dir: `output/`
