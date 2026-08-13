@@ -21,6 +21,21 @@ A Nextflow DSL2 pipeline for viral metagenomic data analysis. It takes raw reads
 
 ## Running the Pipeline
 
+**`NXF_SYNTAX_PARSER=v1` is required.** Nextflow 25.x made a restricted config language the
+default, and neither `nextflow.config` nor the workflow scripts are written in it — a run
+fails at startup with a config parse error that points at a line rather than at the cause.
+Export it, or every run dies before the first process:
+
+```bash
+export NXF_SYNTAX_PARSER=v1
+```
+
+It is easy to miss because an interactive shell may already have it set, so the failure first
+appears in a batch job or on someone else's machine. Migrating to the v2 language is a single
+change touching config and scripts together — see [I-45](docs/dev/KNOWN_ISSUES.md#i-45) for
+the four config constructs and the two script constructs that have to move, and why it cannot
+be split into steps.
+
 ```bash
 # Database setup (required on a new installation)
 nextflow run main.nf -profile apptainer --mode setup --db /path/to/db
@@ -39,6 +54,10 @@ nextflow run main.nf -stub -profile test_stub
 closure in `nextflow.config`. If entries under it are symlinks pointing elsewhere, add those
 targets with `--container_binds a,b,c` — Nextflow runs Apptainer with `--no-home`, so nothing
 outside the work directory is visible unless bound.
+
+`--sample_metadata` joins per-sample phenotypes into the TSE's `colData`. It cannot ride in
+the samplesheet: `INPUT_CHECK` rejects anything that is not exactly three columns. Without it
+`colData` holds only the sample name, and no group-wise analysis of the output is possible.
 
 `--mode` names the last stage to run. `setup` builds databases and reads no samplesheet; the
 rest are cumulative — `fastqc` → `fastp` → `contiglib` → `all` (default), each running every

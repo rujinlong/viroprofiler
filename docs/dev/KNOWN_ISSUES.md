@@ -53,6 +53,9 @@ usability defect · **P3** hygiene.
 | [I-42](#i-42) | P0 | Containers — conda post-link scripts are not run by pixi, leaving a data package uninstalled | Fixed |
 | [I-43](#i-43) | P0 | Containers — the VAMB version pinned has no `--jgi`, the flag the process passes | Fixed |
 | [I-44](#i-44) | P1 | Modules — VAMB's `--jgi` pairs depths to contigs by row, not by name | Fixed |
+| [I-45](#i-45) | P0 | Config — the pipeline does not parse under Nextflow's default config parser | Open |
+| [I-46](#i-46) | P1 | Modules — iPHoP, CheckAMG and DRAM-v results never reached `RESULTS_TSE` | Fixed |
+| [I-47](#i-47) | P2 | Config — 432 lines of iGenomes reference config that nothing reads | Fixed |
 
 ---
 
@@ -1072,3 +1075,98 @@ Two related hardenings went in with it, neither of which had produced a wrong an
 re-formatting it with `%.4f`, because PHAMB applies `round(x, 2)` to whatever it reads and
 0.00499 re-emitted as 0.0050 rounds to 0.01 instead of 0.00; and the vRhyme model download is
 checked against a pinned SHA-256 rather than trusted because its URL carries a commit.
+
+
+---
+
+## I-45
+
+**Config — the pipeline does not parse under Nextflow's default config parser.** P0. Open.
+
+Nextflow 25.x made a new, restricted config language the default. `nextflow.config` is not
+written in it, and a run dies before the first process with a message that points at a line
+of config rather than at the cause:
+
+```
+Error nextflow.config:286:27: Unexpected input: '\n'
+ 286 |             case 'docker':
+ERROR ~ Config parsing failed
+```
+
+Four constructs are rejected, each independently fatal:
+
+- the `switch` in the `containerOptions` closure;
+- `def check_max(obj, type)`, a function definition, used at 133 call sites;
+- the top-level `if (!params.igenomes_ignore)` — *"If statements cannot be mixed with config
+  statements"*, so a conditional `includeConfig` has no v2 spelling at all;
+- `def trace_timestamp = ...`, a variable declaration.
+
+The script parser is stricter too: `for` loops are gone (`workflows/viroprofiler.nf:15`), and
+a top-level statement such as `WorkflowMain.initialise(...)` in `main.nf` must move inside a
+`workflow` block.
+
+**Why it has been invisible.** `NXF_SYNTAX_PARSER=v1` happens to be set in the interactive
+shell on the development machine. Every run to date inherited it. A `sbatch --export=NIL` job
+does not, which is how it surfaced, and neither does a new user's shell.
+
+**The two parsers cannot both be satisfied.** Moving the Groovy into `lib/` fixes the config
+under v2 — and breaks it under v1, where an unknown identifier in a config closure resolves
+to a `ConfigObject` instead of the class: `Unknown method invocation 'checkMax' on ConfigObject
+type`. Likewise `env('HOME')` is v2-only. So this cannot be done incrementally: config and
+scripts have to migrate together, in one change, and the pipeline then requires a Nextflow new
+enough to have the v2 parser. `manifest.nextflowVersion` would move from `>=22.04.0`
+accordingly.
+
+**Interim.** Runs must set `NXF_SYNTAX_PARSER=v1` explicitly rather than rely on inheriting it.
+
+**Notes for whoever does the migration.** The report file names are the one piece with no
+obvious v2 spelling: the `timeline`/`report`/`trace`/`dag` scopes resolve `params` and nothing
+else — not a local variable, not `workflow`, not a `lib/` class — so `execution_trace_${trace_timestamp}.txt`
+cannot be expressed. The workable substitute is a `params.trace_tag` defaulting to empty, with
+the timestamp supplied on the command line when several runs share an `--outdir`.
+
+---
+
+## I-46
+
+**iPHoP, CheckAMG and DRAM-v results never reached `RESULTS_TSE`.** P1. Fixed.
+
+All three ran, all three published their tables under `--outdir`, and none of them was wired
+into the process that builds the TreeSummarizedExperiment. The R object that is the pipeline's
+headline output therefore carried no host prediction, no auxiliary-gene calls and no per-gene
+annotation. On the two-sample test CheckAMG produced 210 curated protein calls that nothing
+downstream could see.
+
+`DRAMV` did not even emit its annotation table as a named channel — only `genes.faa` and
+`scaffolds.fna` — and `ABUNDANCE` did not emit `log_contig_count.txt`, the only place CoverM
+records each sample's library size.
+
+**Resolution.** `RESULTS_TSE` takes eight optional inputs: VIBRANT, geNomad, CheckAMG, iPHoP,
+DRAM-v, the candidate contig list, the CoverM log and a sample metadata table. When a tool did
+not run its slot carries an empty placeholder from `assets/optional/` and the corresponding
+`create_tse.r` argument is omitted, so vpfkit leaves those columns out of `rowData` rather
+than joining an empty table — which keeps "switched off" distinguishable from "found nothing".
+
+Sample metadata needs `--sample_metadata` rather than extra samplesheet columns:
+`INPUT_CHECK` rejects a samplesheet that is not exactly three columns. Until this, `colData`
+held nothing but the sample name, so no group-wise analysis was possible on the pipeline's own
+output at all.
+
+The two placeholder tables with fabricated header rows (`assets/no_dvf_scores.tsv`,
+`assets/no_vibrant_quality.tsv`) are gone. They existed only because `create_vpftse()` indexed
+columns without checking for them; vpfkit now treats both inputs as optional.
+
+---
+
+## I-47
+
+**432 lines of iGenomes reference config that nothing reads.** P2. Fixed.
+
+`conf/igenomes.config`, `params.genome`, `params.igenomes_base`, `params.igenomes_ignore`,
+`WorkflowMain.getGenomeAttribute()` and `WorkflowViroprofiler.genomeExistsError()` were
+nf-core template scaffolding. No process reads `params.genome` or `params.fasta`;
+`getGenomeAttribute` is defined and never called. `genomeExistsError` validated `--genome` on
+every run, against a table only it consulted.
+
+Removed. `workflows/contig_anno.nf` also imported `RESULTS_TSE` without ever calling it; that
+import is gone too.
