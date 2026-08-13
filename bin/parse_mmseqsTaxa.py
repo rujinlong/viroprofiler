@@ -78,7 +78,7 @@ def main(fin, fout_prefix, unclassified, dbsource):
     # save results
     df_formatted.to_csv("{}_formatted_all.tsv".format(fout_prefix), sep="\t", index=False)
 
-    # save selected columns for merging with vConTACT2 clusters
+    # save selected columns for merge_taxonomy.py to read as the `mmseqs` source
     if dbsource == "ICTV":
         df_sel = df_formatted[['contig_id', 'Realm', 'Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species']]
     elif dbsource == "NCBI":

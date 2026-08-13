@@ -24,8 +24,8 @@ jobs:
           #   image: denglab/viroprofiler-host
           # - dockerfile: ./docker/viroprofiler-replicyc/Dockerfile
           #   image: denglab/viroprofiler-replicyc
-          # - dockerfile: ./docker/viroprofiler-taxa/Dockerfile
-          #   image: denglab/viroprofiler-taxa
+          # - dockerfile: ./docker/viroprofiler-vcontact3/Dockerfile
+          #   image: denglab/viroprofiler-vcontact3
           # - dockerfile: ./docker/viroprofiler-abundance/Dockerfile
           #   image: denglab/viroprofiler-abundance
           # - dockerfile: ./docker/viroprofiler-vibrant/Dockerfile

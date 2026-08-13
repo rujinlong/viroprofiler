@@ -175,9 +175,8 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 | `--binning_minlen_bin` | :material-close: | 2000 | Bins shorter than this value will be removed from downstream analyses |
 | `--dvf_qvalue` | :material-close: | 0.1 | q-value used in `DeepVirFinder` |
 | `--virsorter2_groups` | :material-close: | "dsDNAphage" | Viral category detected by `VirSorter2`, could be any combination of `dsDNAphage,NCLDV,RNA,ssDNA,lavidaviridae` |
-| `--contig_minlen_vcontact2` | :material-close: | 10000 | Contigs/Bins short than this value will not be used in `vConTACT2` |
-| `--pc_inflation` | :material-close: | 1.5 | Protein cluster inflation value used in `vConTACT2` |
-| `--vc_inflation` | :material-close: | 1.5 | Viral cluster inflation value used in `vConTACT2` |
+| `--contig_minlen_vcontact3` | :material-close: | 10000 | Contigs/Bins short than this value will not be used in `vConTACT3` |
+| `--vcontact3_db_version` | :material-close: | 232 | vConTACT3 reference database version. Each vConTACT3 release accepts exactly one version |
 | `--taxa_db_source` | :material-close: | "NCBI" | Taxonomy database, could be either `NCBI` or `ICTV` |
 | `--replicyc` | :material-close: | "replidec" | Viral replication cycle prediction method, could be either `replidec` or `bacphlip` |
 

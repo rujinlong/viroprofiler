@@ -10,8 +10,13 @@ nextflow run main.nf -profile apptainer,arm64_local --input samplesheet.csv --db
 ```
 
 `docker/build_arm64.sh` covers `base`, `qc`, `abundance`, `replicyc`, `vibrant`, `bracken`,
-`virsorter2`, `taxa`, `geneannot`, `binning` and `viewer`. Two images are missing from that
-list on purpose: they cannot be built for `linux-aarch64` at all.
+`virsorter2`, `vcontact3`, `geneannot`, `binning` and `viewer`. Two images are missing from
+that list on purpose: they cannot be built for `linux-aarch64` at all.
+
+`vcontact3` is buildable here only because it does not come from conda: `fastcluster` and
+`jenkspy` have no `linux-aarch64` conda build, so `pixi global install -c bioconda vcontact3`
+and every other conda route fail, while both packages compile from their PyPI sdists. See
+[I-32](KNOWN_ISSUES.md#i-32).
 
 ## `viroprofiler-host` — iPHoP
 

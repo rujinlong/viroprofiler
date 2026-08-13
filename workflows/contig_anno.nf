@@ -63,7 +63,7 @@ include { VIRALHOST_IPHOP              } from '../modules/local/viral_host'
 include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
 include { CHECKV; VIRSORTER2; DVF; VIRCONTIGS_PRE; VIBRANT           } from '../modules/local/viral_detection'
 include { GENEPRED as GENEPRED4CTG; NRSEQS as NRPROT; NRSEQS as NRGENE } from '../modules/local/gene_library'
-include { TAXONOMY_VCONTACT; TAXONOMY_MMSEQS; TAXONOMY_MERGE           } from '../modules/local/taxonomy'
+include { TAXONOMY_VCONTACT3; TAXONOMY_MMSEQS; TAXONOMY_MERGE          } from '../modules/local/taxonomy'
 include { RESULTS_TSE                  } from '../modules/local/base'
 
 /*
@@ -132,9 +132,9 @@ workflow CONTIGANNO {
     }
 
     // Taxonomy
-    TAXONOMY_VCONTACT(ch_nrclib)
+    TAXONOMY_VCONTACT3(ch_nrclib)
     TAXONOMY_MMSEQS(ch_nrclib)
-    TAXONOMY_MERGE(TAXONOMY_VCONTACT.out.taxa_vc_ch, TAXONOMY_MMSEQS.out.taxa_mmseqs_ch)
+    TAXONOMY_MERGE(TAXONOMY_VCONTACT3.out.taxa_vc_ch, TAXONOMY_MMSEQS.out.taxa_mmseqs_ch)
 
     // Viral host
     if ( params.use_iphop ) {

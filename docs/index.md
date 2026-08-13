@@ -15,7 +15,7 @@ The pipeline's main steps are:
 | Viral contig identification | [VirSorter2](https://github.com/jiarong/VirSorter2), [DeepVirFinder](https://github.com/jessieren/DeepVirFinder), [VIBRANT](https://github.com/AnantharamanLab/VIBRANT) and [CheckV](https://bitbucket.org/berkeleylab/checkv/src/master/) |
 | Gene function annotation | [DRAM-v](https://github.com/WrightonLabCSU/DRAM), [EggNOG](http://eggnog5.embl.de/) and [abricate](https://github.com/tseemann/abricate) |
 | Viral replication cycle prediction |  [BACPHLIP](https://github.com/adamhockenberry/bacphlip) or [Replidec](https://github.com/deng-lab/Replidec) |
-| Viral taxonomy annotation | [vConTACT2](https://bitbucket.org/MAVERICLab/vcontact2) and [MMseqs2 taxonomy](https://github.com/soedinglab/MMseqs2) |
+| Viral taxonomy annotation | [vConTACT3](https://bitbucket.org/MAVERICLab/vcontact3) and [MMseqs2 taxonomy](https://github.com/soedinglab/MMseqs2) |
 | Viral-host prediction | [iPHoP](https://bitbucket.org/srouxjgi/iphop) |
 | Results visualization | [MultiQC](https://multiqc.info/), [R Markdown](https://rmarkdown.rstudio.com/) and [Shiny](https://shiny.rstudio.com/) |
 

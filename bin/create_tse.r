@@ -7,6 +7,7 @@ library(vpfkit)
 p <- arg_parser("Create ViroProfiler TSE object")
 p <- add_argument(p, "--fin_abcount", help="abundance_contigs_count.tsv.gz")
 p <- add_argument(p, "--fin_abtpm", help="abundance_contigs_tpm.tsv.gz")
+p <- add_argument(p, "--fin_abtmm", help="abundance_contigs_trimmed_mean.tsv.gz")
 p <- add_argument(p, "--fin_abcov", help="abundance_contigs_covered_fraction.tsv.gz")
 p <- add_argument(p, "--fin_taxa", help="taxa_mmseqs_formatted_all.tsv")
 p <- add_argument(p, "--fin_checkv", help="quality_summary.tsv")
@@ -18,6 +19,7 @@ argv <- parse_args(p)
 
 tse <- vpfkit::create_vpftse(fin_abcount = argv$fin_abcount,
                       fin_abtpm = argv$fin_abtpm,
+                      fin_abtmm = argv$fin_abtmm,
                       fin_abcov = argv$fin_abcov,
                       fin_taxa = argv$fin_taxa,
                       fin_checkv = argv$fin_checkv,

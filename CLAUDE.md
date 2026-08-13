@@ -58,7 +58,7 @@ INPUT_CHECK (samplesheet CSV)
      |- Gene library: GENEPRED -> NRPROT/NRGENE [-> EMAPPER, ABRICATE]
      |- Abundance: CONTIGINDEX -> MAPPING2CONTIGS2 -> ABUNDANCE
      |- Viral detection: VIBRANT + DVF -> VIRCONTIGS_PRE [-> binning] -> VIRSORTER2 [-> DRAMV]
-     |- Taxonomy: TAXONOMY_VCONTACT + TAXONOMY_MMSEQS -> TAXONOMY_MERGE
+     |- Taxonomy: TAXONOMY_VCONTACT3 + TAXONOMY_MMSEQS -> TAXONOMY_MERGE
      |- Host prediction: VIRALHOST_IPHOP
      |- Replication cycle: BACPHLIP or REPLIDEC
   -> RESULTS_TSE (final R object)
@@ -81,11 +81,11 @@ INPUT_CHECK (samplesheet CSV)
 
 ### Container Strategy
 
-11 separate Docker images per functional group, built from `docker/` subdirectories. Images published to Docker Hub under `denglab/` org. Container versions defined in `conf/modules.config` via `withLabel` directives.
+14 separate Docker images per functional group, built from `docker/` subdirectories. Images published to Docker Hub under `denglab/` org. Container versions defined in `conf/modules.config` via `withLabel` directives.
 
 ### Helper Scripts
 
-`bin/` contains 19 Python/R/shell scripts called by processes (e.g., `run_checkv.sh`, `parse_mmseqsTaxa.py`, `create_tse.r`).
+`bin/` contains 17 Python/R/shell scripts called by processes (e.g., `run_checkv.sh`, `parse_mmseqsTaxa.py`, `create_tse.r`).
 
 ### Groovy Libraries
 

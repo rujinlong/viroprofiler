@@ -13,7 +13,7 @@
 | eggnog-mapper | Gene annotation                     | GPL v3      |
 | abricate      | Gene annotation                     | GPL v2      |
 | MMseqs2       | Taxonomy assignment                 | GPL v3      |
-| vConTACT2     | Taxonomy assignment                 | GPL v3      |
+| vConTACT3     | Taxonomy assignment                 | GPL v3      |
 | Bacphlip      | Lifestyle prediction                | MIT License |
 | Replidec      | Lifestyle prediction                | MIT License |
 | iPHoP         | Host prediction                     | GPL v3      |
@@ -68,7 +68,7 @@
 - [DRAM-v](https://github.com/WrightonLabCSU/DRAM)
   > Shaffer, Michael, et al. "DRAM for distilling microbial metabolism to automate the curation of microbiome function." Nucleic acids research 48.16 (2020): 8883-8900.
 
-- [vConTACT2](https://bitbucket.org/MAVERICLab/vcontact2)
+- [vConTACT3](https://bitbucket.org/MAVERICLab/vcontact3)
   > Bin Jang, Ho, et al. "Taxonomic assignment of uncultivated prokaryotic virus genomes is enabled by gene-sharing networks." Nature biotechnology 37.6 (2019): 632-639.
 
 - [MMseqs2](https://github.com/soedinglab/MMseqs2)

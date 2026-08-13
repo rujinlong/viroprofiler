@@ -8,6 +8,10 @@ dependencies:
     # bin/create_tse.r
     - conda-forge::r-argparser
     - conda-forge::r-readr
+    # vpfkit::read_coverm() reads abundance_*.tsv.gz with data.table::fread(), which
+    # delegates gz decompression to R.utils. Without it RESULTS_TSE cannot read any
+    # abundance table.
+    - conda-forge::r-r.utils
     - conda-forge::r-remotes
     # vpfkit (github.com/deng-lab/vpfkit) imports
     # vpfkit's R sources call library(tidyverse) at load time even though its

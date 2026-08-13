@@ -4,6 +4,7 @@ process RESULTS_TSE {
     input:
     path abundance_count
     path abundance_tpm
+    path abundance_tmm
     path abundance_covfrac
     path taxa
     path checkv_quality
@@ -23,6 +24,7 @@ process RESULTS_TSE {
     """
     create_tse.r --fin_abcount $abundance_count \\
                  --fin_abtpm $abundance_tpm \\
+                 --fin_abtmm $abundance_tmm \\
                  --fin_abcov $abundance_covfrac \\
                  --fin_taxa $taxa \\
                  --fin_checkv $checkv_quality \\

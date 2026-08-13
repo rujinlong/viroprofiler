@@ -50,9 +50,8 @@ dvf_maxlen: 1000000
 virsorter2_groups: "dsDNAphage"
 
 # =============================  Taxonomy  ====================================
-contig_minlen_vcontact2: 10000
-pc_inflation: 1.5
-vc_inflation: 1.5
+contig_minlen_vcontact3: 10000
+vcontact3_db_version: 232
 taxa_db_source: "NCBI"
 
 # =============================  Replication cycle  ===========================

@@ -264,20 +264,15 @@
                         "ICTV"
                     ]
                 },
-                "contig_minlen_vcontact2": {
+                "contig_minlen_vcontact3": {
                     "type": "integer",
-                    "description": "Minimum contig length for vConTACT2 input",
+                    "description": "Minimum contig length for vConTACT3 input",
                     "default": 10000
                 },
-                "pc_inflation": {
-                    "type": "number",
-                    "description": "Inflation of protein clusters in vConTACT2",
-                    "default": 1.5
-                },
-                "vc_inflation": {
-                    "type": "number",
-                    "description": "Inflation of viral clusters in vConTACT2",
-                    "default": 1.5
+                "vcontact3_db_version": {
+                    "type": "integer",
+                    "description": "vConTACT3 reference database version. Each vConTACT3 release accepts only one version; 3.2.4 requires 232 and rejects 223, 228 and 230.",
+                    "default": 232
                 }
             }
         },

@@ -139,7 +139,7 @@ process {
         memory = "200 GB"
     }
 
-    withName: TAXONOMY_VCONTACT {
+    withName: TAXONOMY_VCONTACT3 {
         cpus = 4
         memory = "100 GB"
     }

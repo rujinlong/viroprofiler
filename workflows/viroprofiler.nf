@@ -63,7 +63,7 @@ include { VIRALHOST_IPHOP              } from '../modules/local/viral_host'
 include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
 include { CHECKV; VIRSORTER2; DVF; VIRCONTIGS_PRE; VIBRANT           } from '../modules/local/viral_detection'
 include { GENEPRED as GENEPRED4CTG; NRSEQS as NRPROT; NRSEQS as NRGENE } from '../modules/local/gene_library'
-include { TAXONOMY_VCONTACT; TAXONOMY_MMSEQS; TAXONOMY_MERGE           } from '../modules/local/taxonomy'
+include { TAXONOMY_VCONTACT3; TAXONOMY_MMSEQS; TAXONOMY_MERGE          } from '../modules/local/taxonomy'
 include { RESULTS_TSE                  } from '../modules/local/base'
 
 /*
@@ -220,8 +220,11 @@ workflow VIROPROFILER {
                 ch_dvf2vcontigs = DVF.out.dvf2vContigs_ch
             } else {
                 // DeepVirFinder pins theano 1.0.3 / keras 2.2.4 and cannot be built for
-                // aarch64. Feed empty placeholders so the union in VIRCONTIGS_PRE and the
-                // TSE assembly still have a file to read.
+                // aarch64. Feed placeholders so the union in VIRCONTIGS_PRE and the TSE
+                // assembly still have a file to read. The score table carries one sentinel
+                // row: a header-only table makes R infer logical columns, which then fails
+                // to join against the character contig IDs. The sentinel matches no contig,
+                // and RESULTS_TSE joins from the contig side, so it never reaches the output.
                 ch_dvfscore = Channel.fromPath("${projectDir}/assets/no_dvf_scores.tsv").first()
                 ch_dvfseq = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
                 ch_dvflist = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
@@ -256,9 +259,9 @@ workflow VIROPROFILER {
             }
 
             // Taxonomy
-            TAXONOMY_VCONTACT(vContigs_and_vMAGs)
+            TAXONOMY_VCONTACT3(vContigs_and_vMAGs)
             TAXONOMY_MMSEQS(vContigs_and_vMAGs)
-            TAXONOMY_MERGE(TAXONOMY_VCONTACT.out.taxa_vc_ch, TAXONOMY_MMSEQS.out.taxa_mmseqs_ch)
+            TAXONOMY_MERGE(TAXONOMY_VCONTACT3.out.taxa_vc_ch, TAXONOMY_MMSEQS.out.taxa_mmseqs_ch)
 
             // for testing only
             // BRACKEN_DB(TAXONOMY_MMSEQS.out.taxa_mmseqs_ch, vContigs_and_vMAGs)
@@ -279,7 +282,7 @@ workflow VIROPROFILER {
             }
 
             ch_versions = ch_versions.mix(VIRSORTER2.out.versions)
-            ch_versions = ch_versions.mix(TAXONOMY_VCONTACT.out.versions)
+            ch_versions = ch_versions.mix(TAXONOMY_VCONTACT3.out.versions)
             ch_versions = ch_versions.mix(TAXONOMY_MMSEQS.out.versions)
             ch_versions = ch_versions.mix(TAXONOMY_MERGE.out.versions)
             // ch_versions = ch_versions.mix(BRACKEN.out.versions)
@@ -296,7 +299,7 @@ workflow VIROPROFILER {
             }
 
             // TreeSummarizedExperiment
-            RESULTS_TSE (ABUNDANCE.out.ab_count_ch, ABUNDANCE.out.ab_tpm_ch, ABUNDANCE.out.ab_covfrac_ch, TAXONOMY_MERGE.out.taxa_mmseqs_ch, CHECKV.out.checkv2vContigs_ch, VIRSORTER2.out.vs2_score_ch, VIBRANT.out.vibrant_quality_ch, ch_dvf2vcontigs, ch_replicyc)
+            RESULTS_TSE (ABUNDANCE.out.ab_count_ch, ABUNDANCE.out.ab_tpm_ch, ABUNDANCE.out.ab_trmean_ch, ABUNDANCE.out.ab_covfrac_ch, TAXONOMY_MERGE.out.taxa_mmseqs_ch, CHECKV.out.checkv2vContigs_ch, VIRSORTER2.out.vs2_score_ch, VIBRANT.out.vibrant_quality_ch, ch_dvf2vcontigs, ch_replicyc)
 
             CUSTOM_DUMPSOFTWAREVERSIONS (
                 ch_versions.unique().collectFile(name: 'collated_versions.yml')

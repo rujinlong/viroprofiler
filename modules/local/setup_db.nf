@@ -354,6 +354,82 @@ process DB_VIBRANT {
 }
 
 
+process DB_VCONTACT3 {
+    label "viroprofiler_vcontact3"
+    label "setup"
+
+    when:
+    params.mode == "setup"
+
+    script:
+    """
+    VCONTACT3_DB="${params.db}/vcontact3"
+    VERSION="${params.vcontact3_db_version}"
+
+    # The one file whose presence proves the release actually landed and is
+    # readable by mmseqs: the clustered RefSeq protein database vConTACT3
+    # searches every run. `mmseqs dbtype` prints the database's type, so
+    # "Clustering" is the answer for an intact clustering database and anything
+    # else -- a truncated file, an HTML error page, a directory that only got
+    # as far as being created -- fails to produce it.
+    #
+    # Do not substitute the exit status of `prepare_databases` for this check:
+    # it prints "[ERROR] Unable to retrieve database <v> ..." on runs that go on
+    # to produce a perfectly usable database.
+    check_db () {
+        mmseqs dbtype "\$1/v\${VERSION}/RefSeq.\${VERSION}.0.3.mmseq_0.3_clu" 2>/dev/null \\
+            | grep -qx "Clustering"
+    }
+
+    if check_db "\$VCONTACT3_DB"; then
+        echo "vConTACT3 database already exists"
+    else
+        # Build into the task work directory and publish only once verified, so
+        # an interrupted download cannot leave a directory behind that the check
+        # above would later have to distinguish from a finished one.
+        BUILD_DIR="\$PWD/vcontact3_db"
+        rm -rf "\$BUILD_DIR"
+        mkdir -p "\$BUILD_DIR"
+
+        # ~14 GB unpacked, plus the archive itself while it is being unpacked.
+        REQUIRED_KB=\$((40 * 1024 * 1024))
+        AVAILABLE_KB=\$(df -Pk "\$PWD" | awk 'NR == 2 { print \$4 }')
+        if [ "\$AVAILABLE_KB" -lt "\$REQUIRED_KB" ]; then
+            echo "Building the vConTACT3 database needs ~40 GB in the work directory, but" >&2
+            echo "only \$((AVAILABLE_KB / 1024 / 1024)) GB is free on the filesystem holding \$PWD." >&2
+            echo "Point Nextflow at a larger work directory with -w." >&2
+            exit 1
+        fi
+
+        # Only one database version is compatible with any given vConTACT3
+        # release, and `prepare_databases` refuses the others outright, so the
+        # version is pinned rather than left at "latest".
+        vcontact3 prepare_databases -g "\$VERSION" -s "\$BUILD_DIR" || \\
+            echo "prepare_databases returned non-zero; verifying the result anyway"
+
+        # The archive is only an intermediate; it is as large as the database.
+        rm -f "\$BUILD_DIR"/v\${VERSION}.tar.*
+
+        check_db "\$BUILD_DIR" || {
+            echo "The vConTACT3 database in \$BUILD_DIR is unusable: " >&2
+            echo "v\${VERSION}/RefSeq.\${VERSION}.0.3.mmseq_0.3_clu is not an mmseqs clustering database." >&2
+            exit 1
+        }
+
+        rm -rf "\$VCONTACT3_DB"
+        mkdir -p "\$(dirname "\$VCONTACT3_DB")"
+        mv "\$BUILD_DIR" "\$VCONTACT3_DB"
+    fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/vcontact3
+    echo "DB_VCONTACT3 stub"
+    """
+}
+
+
 process DB_VREFSEQ {
     label "viroprofiler_base"
     label "setup"

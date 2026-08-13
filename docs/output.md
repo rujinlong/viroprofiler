@@ -97,7 +97,20 @@ Protein sequences of viruses are annotated using multiple tools and databases (D
 
 ### Taxonomy assignment
 
-Taxonomy is assigned to contigs or bins using the MMseqs2 taxonomy module with a customized viral database built from NCBI RefSeq viral sequences. Contigs are also clustered at roughly genus level using vConTACT2. While vConTACT2 can assign taxonomy, it typically covers only a small fraction of contigs; therefore, MMseqs2 serves as the primary taxonomy assignment tool. ViroProfiler also supports the ICTV viral taxonomy nomenclature via a separate database built from ICTV sequences and annotations. Results are saved to the `taxonomy` folder.
+Taxonomy is assigned by two independent callers and then merged. vConTACT3 clusters
+the contigs with a reference set by gene sharing and predicts a lineage from realm down
+to genus for each cluster; the MMseqs2 taxonomy module assigns a per-contig LCA against
+a customized viral database built from NCBI RefSeq viral sequences, which reaches species
+but is noisier. `merge_taxonomy.py` resolves the two rank by rank, taking the
+highest-priority caller that made a call at that rank -- vConTACT3 first, MMseqs2 second.
+
+The merged table is `taxonomy/taxonomy.tsv`: one row per contig, one column per rank
+(`Realm` ... `Species`), and beside each rank a `<Rank>_source` column naming the caller
+the value came from. Ranks vConTACT3 labelled as de novo clusters keep its
+`novel_<rank>_<n>_of_<parent>` labels, which are stable per cluster and cannot be
+confused with ICTV names. ViroProfiler also supports the ICTV viral taxonomy nomenclature
+via a separate database built from ICTV sequences and annotations. Results are saved to
+the `taxonomy` folder.
 
 ### Viral-host prediction
 

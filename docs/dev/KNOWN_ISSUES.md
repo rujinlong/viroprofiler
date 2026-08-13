@@ -80,10 +80,11 @@ multi-threaded native aligners.
 | `mmseqs2`, `spades`, `fastp`, `bbmap`, `seqkit`, `prodigal-gv`, `bowtie2`, `coverm` | yes |
 | `virsorter` | no — `linux-64` + `noarch` only |
 | `fastqc`, `abricate`, `eggnog-mapper`, `multiqc` | no — `linux-64` + `noarch` only |
-| `checkv`, `vibrant`, `vcontact2`, `iphop`, `bacphlip`, `replidec`, `vrhyme` | `noarch` (installable, but their compiled dependencies must resolve) |
+| `checkv`, `vibrant`, `iphop`, `bacphlip`, `replidec`, `vrhyme` | `noarch` (installable, but their compiled dependencies must resolve) |
+| `vcontact3` | no — and two of its dependencies have no aarch64 conda build either ([I-32](#i-32)) |
 | `deepvirfinder` | not in bioconda at all (comes from the `hcc` channel) |
 
-`docker/viroprofiler-taxa/Dockerfile` additionally downloads
+The retired `docker/viroprofiler-taxa/Dockerfile` additionally downloaded
 `mmseqs-linux-avx2.tar.gz`, an x86-64 binary that has no arm64 equivalent under that name.
 
 <a id="i-02"></a>
@@ -640,3 +641,83 @@ archive and checks that it can read the result, so an unsuitable work directory 
 seconds with the reason and the fix (`-w`) instead of an hour later as a bare `PermissionError`.
 The published database is then made owner-readable explicitly, and `check_dram_db.py` opens
 every file the `CONFIG` names rather than trusting its mode bits.
+
+<a id="i-32"></a>
+## I-32 — vConTACT2 replaced by vConTACT3 (P1)
+
+vConTACT2 clusters contigs but does not assign taxonomy, so `bin/parse_vContact2_vc.py`
+had to derive one: it split `genome_by_genome_overview.csv` into query contigs and
+reference genomes **by testing whether the contig name contains `NODE_`**, computed a
+per-cluster LCA over the reference genomes, and transferred it to the queries. That test
+is a SPAdes naming convention, so the whole taxonomy assignment silently produced nothing
+for MEGAHIT, Flye or any pre-assembled contig set, and `--assembler other` only inverted
+the test rather than fixing it. vConTACT3 predicts taxonomy natively and marks reference
+genomes with a `Reference` boolean, so both the guess and the hand-rolled LCA are gone,
+along with `bin/parse_vContact2_vc.py` and `bin/combine_taxa.py`.
+
+Four things about vConTACT3 are not obvious and each one costs a build or a wrong result.
+
+**It cannot be installed from conda on aarch64, and there is no PyPI package.**
+`pixi global install -c bioconda vcontact3` and every other conda route fail because
+`fastcluster` and `jenkspy` have no `linux-aarch64` conda build. There is no `vcontact3`
+distribution on PyPI at all, so the Bitbucket source is the only option — and the source
+tree is 3.2.4 against bioconda's 3.0.3. Both blocking packages build from their PyPI
+sdists, which is why `docker/viroprofiler-vcontact3/Dockerfile` installs `build-essential`
+and pins the source by commit (the project publishes no tags).
+
+**Exactly one database version works per release.** 3.2.4 accepts version 232 and rejects
+223, 228 and 230 outright. `--db-version` is therefore passed explicitly by
+`TAXONOMY_VCONTACT3`; without it vConTACT3 globs `--db-path` and takes whatever is
+numerically newest, which on a host that has ever held another release is the wrong one.
+The version lives in `params.vcontact3_db_version` so that both `DB_VCONTACT3` and
+`TAXONOMY_VCONTACT3` read the same value.
+
+**`prepare_databases` prints `[ERROR] Unable to retrieve database 232 ...` on runs that
+succeed.** Its exit status is not evidence either way. `DB_VCONTACT3` ignores both and
+checks the artifact instead: `mmseqs dbtype <dir>/v232/RefSeq.232.0.3.mmseq_0.3_clu` must
+print `Clustering`, which a truncated download, an HTML error page or a directory that
+only got as far as being created cannot do. The database is built in the task work
+directory and moved into `--db` only after that check passes.
+
+**Its `pandas>=2.1.1` has no upper bound.** A fresh resolve installs pandas 3.x, published
+years after this commit and changing copy-on-write and string-dtype semantics throughout —
+the same trap that broke vConTACT2 with numpy 1.24 and scipy's COO refactor ([I-21](#i-21)).
+The Dockerfile pins `pandas>=2.1.1,<3`.
+
+Two smaller findings. vConTACT3 3.2.4 never invokes `diamond`: `find_tools` looks up only
+`mmseqs` (required) and `vclust` (optional, and it gates only the `ani` export this
+pipeline does not request). And it bundles `pyrodigal` and `pyrodigal-gv`, so the external
+gene caller and `bin/gene_to_genome.py` that vConTACT2 needed are gone too.
+
+`docker/viroprofiler-taxa` is retired with vConTACT2; `TAXONOMY_MERGE` is pure Python over
+the callers' tables and runs in `viroprofiler-base`, which already carries pandas and click.
+
+<a id="i-33"></a>
+## I-33 — `RESULTS_TSE` cannot read its own gzipped abundance inputs (P0)
+
+Unrelated to taxonomy, but it is what the pipeline now fails on once taxonomy
+completes, and it had never been reached before: no run in this repository has
+ever produced an `.rds`, because every earlier one stopped at vConTACT2.
+
+`ABUNDANCE` writes `abundance_contigs_{count,tpm,covered_fraction}.tsv.gz`, and
+`vpfkit::read_coverm()` opens them with `data.table::fread()`. `fread()` cannot
+decompress a `.gz` without the `R.utils` package, and `denglab/viroprofiler-viewer`
+does not have it:
+
+```
+$ apptainer exec viroprofiler-viewer.sif Rscript -e 'requireNamespace("R.utils")'
+FALSE
+
+Error in fread(fpath) :
+  To read gz files directly, fread() requires 'R.utils' package which cannot be
+  found. Please install 'R.utils' using 'install.packages('R.utils')'.
+Calls: <Anonymous> ... read_coverm -> fread -> stopf -> raise_condition -> signal
+```
+
+The taxonomy input is unaffected: `taxa_mmseqs_formatted_all.tsv` is not
+compressed, and `read_coverm` never opens it.
+
+This cannot be fixed from this repository as it stands, which is the point of
+[I-02](#i-02): the viewer image has no Dockerfile here, so `R.utils` cannot be
+added to it. Either that image gains a Dockerfile and the package, or
+`RESULTS_TSE` decompresses the three files before calling `create_tse.r`.

@@ -1,12 +1,11 @@
-process TAXONOMY_VCONTACT {
-    label "viroprofiler_taxa"
+process TAXONOMY_VCONTACT3 {
+    label "viroprofiler_vcontact3"
 
     input:
     path contigs
 
     output:
-    path "out_vContact2/genome_by_genome_overview.csv", emit: taxa_vc_ch
-    path "out_vContact2/c1.ntw"
+    path "out_vcontact3/exports/final_assignments.csv", emit: taxa_vc_ch
     path "versions.yml", emit: versions
 
     when:
@@ -14,30 +13,40 @@ process TAXONOMY_VCONTACT {
 
     script:
     """
-    seqkit seq -m $params.contig_minlen_vcontact2 $contigs > input.fasta
-    prodigal-gv -i input.fasta -o all.gff -a all.faa -d all.fna -p meta -f gff
-    mkdir -p prodigal
-    mv all.faa all.fna prodigal
-    seqkit seq -m 1 prodigal/all.faa | sed 's/*//' |  grep -v '^\$' > proteins.faa
-    seqkit seq -m 1 prodigal/all.fna | sed 's/*//' |  grep -v '^\$' > genes.fna
-    gene_to_genome.py -a proteins.faa -o vcontact_gene2genome.tsv
-    vcontact2 --c1-bin /opt/conda/bin/cluster_one-1.0.jar --raw-proteins proteins.faa --rel-mode 'Diamond' --proteins-fp vcontact_gene2genome.tsv --db 'ProkaryoticViralRefSeq211-Merged' --pcs-mode MCL --vcs-mode ClusterONE --output-dir out_vContact2 -t $task.cpus --pc-inflation $params.pc_inflation --vc-inflation $params.vc_inflation
+    # matplotlib and ete3 both write into \$HOME on import, and Nextflow runs
+    # Apptainer with --no-home, so \$HOME is a read-only stub.
+    export HOME=\$PWD
+
+    seqkit seq -m $params.contig_minlen_vcontact3 $contigs > input.fasta
+
+    # vConTACT3 calls its own genes with the bundled pyrodigal-gv, so unlike
+    # vConTACT2 this needs no external gene caller and no gene-to-genome map.
+    # Only database version ${params.vcontact3_db_version} is compatible with this release; leaving the
+    # version out would make vConTACT3 pick whatever is newest under --db-path.
+    vcontact3 run \\
+        --nucleotide input.fasta \\
+        --pyrodigal-gv \\
+        --output out_vcontact3 \\
+        --db-path ${params.db}/vcontact3 \\
+        --db-version ${params.vcontact3_db_version} \\
+        --threads $task.cpus \\
+        --no-progress \\
+        --force-overwrite
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        vConTACT2: \$(grep "This is vConTACT2 " .command.out | sed 's/.* //g;s/=*//g')
+        vConTACT3: \$(vcontact3 version)
     END_VERSIONS
     """
 
     stub:
     """
-    mkdir -p out_vContact2
-    printf 'Genome,VC Status,VC,Order,Family,Genus\n' > out_vContact2/genome_by_genome_overview.csv
-    touch out_vContact2/c1.ntw
+    mkdir -p out_vcontact3/exports
+    printf 'Genome,GenomeName,Proteins,Reference,Size_Kb,realm_reference,realm_prediction,kingdom_reference,kingdom_prediction,phylum_reference,phylum_prediction,class_reference,class_prediction,order_reference,order_prediction,family_reference,family_prediction,subfamily_reference,subfamily_prediction,genus_reference,genus_prediction\\n' > out_vcontact3/exports/final_assignments.csv
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        vConTACT2: 0.9.22
+        vConTACT3: 3.2.4
     END_VERSIONS
     """
 }
@@ -87,7 +96,9 @@ process TAXONOMY_MMSEQS {
 }
 
 process TAXONOMY_MERGE {
-    label "viroprofiler_taxa"
+    // Pure python over the callers' output tables; needs pandas and click, both
+    // of which the base image already carries.
+    label "viroprofiler_base"
 
     input:
     path taxa_vc
@@ -103,9 +114,17 @@ process TAXONOMY_MERGE {
 
     script:
     """
-    parse_vContact2_vc.py -i $taxa_vc -o taxa_vc2 -a $params.assembler
     parse_mmseqsTaxa.py -i $taxa_mmseqs -o taxa_mmseqs -u "" -s $params.taxa_db_source
-    combine_taxa.py -c taxa_vc2.tsv -m taxa_mmseqs.tsv -o taxonomy
+
+    # Which callers are merged is data: each --source is a (name, priority,
+    # file) triple, smaller priority wins per rank. vConTACT3 goes first because
+    # it predicts taxonomy from gene sharing against a reference set, while the
+    # MMseqs2 LCA is a per-contig vote that reaches further down the ranks but
+    # is noisier. Add VITAP and geNomad as further --source lines.
+    merge_taxonomy.py \\
+        --source vcontact3 1 $taxa_vc \\
+        --source mmseqs 2 taxa_mmseqs.tsv \\
+        -o taxonomy.tsv
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -115,12 +134,14 @@ process TAXONOMY_MERGE {
 
     stub:
     """
-    printf 'contig_id\tOrder\tFamily\tGenus\tSpecies\n' > taxonomy.tsv
-    printf 'contig_id\ttaxid\tlineage\n' > taxa_mmseqs_formatted_all.tsv
+    printf 'contig_id\tRealm\tRealm_source\tKingdom\tKingdom_source\tPhylum\tPhylum_source\tClass\tClass_source\tOrder\tOrder_source\tFamily\tFamily_source\tSubfamily\tSubfamily_source\tGenus\tGenus_source\tSpecies\tSpecies_source\n' > taxonomy.tsv
+    # Columns as parse_mmseqsTaxa.py writes them for the default --taxa_db_source
+    # NCBI; with ICTV the leading rank is Realm rather than Domain.
+    printf 'contig_id\ttaxa_id\tlca_rank\tlca_name\tnprot_all\tnprot_labeled\tnprot_support\tpctprot_support\tDomain\tKingdom\tPhylum\tClass\tOrder\tFamily\tGenus\tSpecies\n' > taxa_mmseqs_formatted_all.tsv
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        python: 3.9.0
+        python: 3.11.0
     END_VERSIONS
     """
 }

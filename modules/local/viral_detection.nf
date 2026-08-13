@@ -141,8 +141,8 @@ process DVF {
 
     stub:
     """
-    printf 'name\tlen\tscore_dvfpred\tpvalue_flag\n' > contigs_dvfpred.txt
-    printf 'contig_id\tdvf_score\n' > dvf_virus.tsv
+    printf 'name\tlen\tscore\tpvalue\n' > contigs_dvfpred.txt
+    printf 'name\tlen\tscore\tpvalue\tqvalue\n' > dvf_virus.tsv
     printf 'stub_NODE_1_length_5000_cov_100\n' > virus_dvf.list
     printf '>stub_NODE_1_length_5000_cov_100\nACGTACGT\n' > dvf.fasta
     """
