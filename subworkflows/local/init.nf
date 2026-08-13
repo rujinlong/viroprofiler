@@ -1,4 +1,4 @@
-include { DB_CHECKV; DB_PHAMB; DB_VIRSORTER2; DB_DRAM; DB_VIBRANT; DB_IPHOP; DB_EGGNOG; DB_VOGDB; DB_MICOMPLETEDB; DB_VREFSEQ; DB_VCONTACT3; DB_KRAKEN2} from "../../modules/local/setup_db"
+include { DB_CHECKV; DB_PHAMB; DB_VIRSORTER2; DB_DRAM; DB_VIBRANT; DB_IPHOP; DB_EGGNOG; DB_VOGDB; DB_MICOMPLETEDB; DB_VREFSEQ; DB_VCONTACT3; DB_VITAP; DB_KRAKEN2} from "../../modules/local/setup_db"
 
 workflow SETUP {
     main:
@@ -21,6 +21,9 @@ workflow SETUP {
     // taxonomy
     DB_VREFSEQ()
     DB_VCONTACT3()
+    if (params.use_vitap) {
+        DB_VITAP()
+    }
     if (params.use_kraken2) {
         DB_KRAKEN2()
     }

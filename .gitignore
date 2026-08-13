@@ -8,3 +8,6 @@ results
 .DS_Store
 testing*
 *.pyc
+
+# git worktrees created for isolated agent runs
+.claude/worktrees/

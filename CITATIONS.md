@@ -15,6 +15,7 @@
 | abricate      | Gene annotation                     | GPL v2      |
 | MMseqs2       | Taxonomy assignment                 | GPL v3      |
 | vConTACT3     | Taxonomy assignment                 | GPL v3      |
+| VITAP         | Taxonomy assignment                 | GPL v3      |
 | Bacphlip      | Lifestyle prediction                | MIT License |
 | Replidec      | Lifestyle prediction                | MIT License |
 | iPHoP         | Host prediction                     | GPL v3      |
@@ -74,6 +75,9 @@
 
 - [vConTACT3](https://bitbucket.org/MAVERICLab/vcontact3)
   > Bin Jang, Ho, et al. "Taxonomic assignment of uncultivated prokaryotic virus genomes is enabled by gene-sharing networks." Nature biotechnology 37.6 (2019): 632-639.
+
+- [VITAP](https://github.com/DrKaiyangZheng/VITAP)
+  > Zheng, Kaiyang, et al. "VITAP: a high precision tool for DNA and RNA viral classification based on meta-omic data." Nature Communications 16.1 (2025): 2226.
 
 - [MMseqs2](https://github.com/soedinglab/MMseqs2)
   > Steinegger, Martin, and Johannes Söding. "MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets." Nature biotechnology 35.11 (2017): 1026-1028.

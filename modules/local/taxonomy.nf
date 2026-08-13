@@ -51,6 +51,61 @@ process TAXONOMY_VCONTACT3 {
     """
 }
 
+process TAXONOMY_VITAP {
+    label "viroprofiler_vitap"
+    // Almost the whole runtime is one `diamond blastp --sensitive` against
+    // 726k reference proteins, which scales with threads. At the one CPU of the
+    // default that search took 126 s for the 200 proteins of a two-sample test.
+    label "process_medium"
+
+    input:
+    path contigs
+
+    output:
+    path "out_vitap/best_determined_lineages.tsv", emit: taxa_vitap_ch
+    // Read by `read_vitap` in merge_taxonomy.py, which needs it to tell the
+    // query contigs apart from the reference genomes VITAP mixes into them.
+    path "out_vitap/ICTV_selected_genomes.fasta", emit: taxa_vitap_ref_ch
+    path "out_vitap/all_lineages.tsv"
+    path "versions.yml", emit: versions
+
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    """
+    # Nextflow runs Apptainer with --no-home, so \$HOME is a read-only stub.
+    export HOME=\$PWD
+
+    # No length filter of its own, unlike TAXONOMY_VCONTACT3: VITAP is built to
+    # classify fragments down to 1 kb, and the contig library it is given has
+    # already been filtered at --contig_minlen.
+    VITAP assignment \\
+        -i $contigs \\
+        -d ${params.db}/vitap \\
+        -o out_vitap \\
+        -p $task.cpus
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        VITAP: \$(pip show VITAP | awk '/^Version:/ { print \$2 }')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    mkdir -p out_vitap
+    printf 'Genome_ID\\tlineage\\tlineage_score\\tConfidence_level\\n' > out_vitap/best_determined_lineages.tsv
+    printf 'Genome_ID\\tlineage\\tlineage_score\\n' > out_vitap/all_lineages.tsv
+    : > out_vitap/ICTV_selected_genomes.fasta
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        VITAP: 1.7
+    END_VERSIONS
+    """
+}
+
 process TAXONOMY_MMSEQS {
     label "viroprofiler_base"
 
@@ -101,6 +156,11 @@ process TAXONOMY_MERGE {
     label "viroprofiler_base"
 
     input:
+    path taxa_vitap
+    // Never named on the command line. `read_vitap` reads it from beside
+    // $taxa_vitap to drop the reference genomes VITAP classifies alongside the
+    // query contigs, so it has to be staged into this task's directory.
+    path taxa_vitap_ref
     path taxa_vc
     path taxa_mmseqs
 
@@ -117,13 +177,20 @@ process TAXONOMY_MERGE {
     parse_mmseqsTaxa.py -i $taxa_mmseqs -o taxa_mmseqs -u "" -s $params.taxa_db_source
 
     # Which callers are merged is data: each --source is a (name, priority,
-    # file) triple, smaller priority wins per rank. vConTACT3 goes first because
-    # it predicts taxonomy from gene sharing against a reference set, while the
-    # MMseqs2 LCA is a per-contig vote that reaches further down the ranks but
-    # is noisier. Add VITAP and geNomad as further --source lines.
+    # file) triple, smaller priority wins per rank.
+    #
+    # VITAP goes first: it is the only caller here that reaches species, it
+    # scores each rank against ICTV reference genomes on a multipartite graph
+    # rather than by a single best hit, and this ordering is the one already in
+    # production use. Priority 2 is deliberately left free for geNomad, which
+    # classifies more genomes than VITAP but stops at family. vConTACT3 follows,
+    # predicting from gene sharing against a reference set, and the MMseqs2 LCA
+    # comes last -- a per-contig vote that reaches deep but is the noisiest of
+    # the four.
     merge_taxonomy.py \\
-        --source vcontact3 1 $taxa_vc \\
-        --source mmseqs 2 taxa_mmseqs.tsv \\
+        --source vitap 1 $taxa_vitap \\
+        --source vcontact3 3 $taxa_vc \\
+        --source mmseqs 4 taxa_mmseqs.tsv \\
         -o taxonomy.tsv
 
     cat <<-END_VERSIONS > versions.yml

@@ -58,7 +58,7 @@ INPUT_CHECK (samplesheet CSV)
      |- Gene library: GENEPRED -> NRPROT/NRGENE [-> EMAPPER, ABRICATE]
      |- Abundance: CONTIGINDEX -> MAPPING2CONTIGS2 -> ABUNDANCE
      |- Viral detection: VIBRANT + DVF -> VIRCONTIGS_PRE [-> binning] -> VIRSORTER2 [-> DRAMV]
-     |- Taxonomy: TAXONOMY_VCONTACT3 + TAXONOMY_MMSEQS -> TAXONOMY_MERGE
+     |- Taxonomy: TAXONOMY_VITAP + TAXONOMY_VCONTACT3 + TAXONOMY_MMSEQS -> TAXONOMY_MERGE
      |- Host prediction: VIRALHOST_IPHOP
      |- Replication cycle: BACPHLIP or REPLIDEC
   -> RESULTS_TSE (final R object)
@@ -93,7 +93,9 @@ INPUT_CHECK (samplesheet CSV)
 
 ## Key Parameters
 
-Optional modules controlled by `use_*` flags: `use_dram` (true), `use_iphop` (true), `use_eggnog` (false), `use_kraken2` (false), `use_phamb` (false), `use_abricate` (false), `use_decontam` (false).
+Optional modules controlled by `use_*` flags: `use_dram` (true), `use_iphop` (true), `use_vitap` (true), `use_eggnog` (false), `use_kraken2` (false), `use_phamb` (false), `use_abricate` (false), `use_decontam` (false).
+
+Taxonomy sources are merged by `bin/merge_taxonomy.py`, which resolves each rank independently from ranked `--source NAME PRIORITY FILE` triples (smaller priority wins): VITAP 1, geNomad 2, vConTACT3 3, MMseqs2 4.
 
 Binning: `params.binning` = false | "phamb" | "vrhyme".
 
