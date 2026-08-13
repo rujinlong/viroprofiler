@@ -65,6 +65,11 @@ flowchart TD
     AB --> TSE[RESULTS_TSE]
     TM --> TSE
     CAMG --> TSE
+    DRAMV --> TSE
+    HOST --> TSE
+    LIFE --> TSE
+    VS2 --> TSE
+    MD[--sample_metadata] --> TSE
     TSE --> MQ[MULTIQC]
 ```
 
@@ -244,14 +249,24 @@ checkout, and it is amd64-only in any case. Reasoning and per-image notes:
 
 Ordered by how much they change results.
 
-1. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
+1. **Push vpfkit and bump `VPFKIT_REF`.** `docker/viroprofiler-viewer/Dockerfile` installs
+   vpfkit from GitHub at a pinned commit, and the commit it names predates the rewrite. Until
+   both happen, a rebuilt viewer image carries the old package and `RESULTS_TSE` will fail on
+   `annotate_viral_votes` not being exported — after every upstream process has finished. The
+   sixteen-sample reference run above was produced with an image built from the local
+   working tree (`denglab/viroprofiler-viewer:localtest`), which is a verification artefact,
+   not something anyone else can reproduce.
+2. **Migrate to the Nextflow v2 config and script language** — [I-45](dev/KNOWN_ISSUES.md#i-45).
+   Every run today depends on `NXF_SYNTAX_PARSER=v1` being exported. This has to be one
+   change covering config and scripts together, and it moves `manifest.nextflowVersion`.
+3. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
    local SIFs — `vcontact3`, `vclust`, `vitap`, `genomad`, `checkamg` were never published,
    and every other image now differs in content from the tag it names — so every profile other
    than `arm64_local` is currently broken. This is the last step before anyone else can run
    the pipeline. Bump the tags rather than overwriting: an image built from a lockfile and one
    built from a loose environment file are not the same artifact, and reusing `v0.2`/`v0.3`
    would leave existing installations silently on the old one.
-2. **Run on amd64.** Nothing here has been built or run on x86-64, and two paths have no
+4. **Run on amd64.** Nothing here has been built or run on x86-64, and two paths have no
    aarch64 execution route at all, so that run is their first real test:
    - `--binning phamb`, end to end. Watch VAMB in particular: the depth table is built in
      FASTA order by name lookup because `--jgi` pairs depths to contigs positionally, and the
@@ -259,20 +274,20 @@ Ordered by how much they change results.
      shuffled abundances. Then check that `run_RF.py` resolves to `/usr/local/bin/run_RF.py`
      and that `vambbins_RF_predictions.txt` is non-empty.
    - `--use_iphop`, which is forced off in the arm64 profile.
-3. **Restore the `.github/workflows/docker.yml` build matrix.** Every entry is still
+5. **Restore the `.github/workflows/docker.yml` build matrix.** Every entry is still
    commented out, so no image is built by CI on either architecture. The lockfile gate that
    should accompany it (`check_locks`) is already in place; what is missing is the build and
    push itself, which is the same work as item 1.
-4. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
+6. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
    process reads it — everything that runs VirSorter2 carries the `viroprofiler_virsorter2`
    label and gets its own image — and it is worth about 1 GB. It was left in place so that the
    pixi migration changed packaging and nothing else.
-5. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md), including the committed
+7. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md), including the committed
    `output_stub*` directories and the literal `${HOME}` in `assets/samplesheet_contigs.csv`.
 
 ## Limits of what has been verified
 
-- **Only one dataset, and a small one.** Two samples, 22 contigs. Cluster-level agreement
+- **Only one dataset.** Sixteen samples, 161 contigs, from one study. Cluster-level agreement
   between the old BLAST recipe and Vclust was measured on a purpose-built 1600-sequence set
   (99.88 % of clusters identical), but real behaviour at 10⁵ contigs is untested — which
   matters most for the `-max_target_seqs` truncation the switch was meant to fix, since that
@@ -289,6 +304,9 @@ Ordered by how much they change results.
 - **iPHoP and DeepVirFinder cannot run on this host at all** — see
   [ARM64.md](dev/ARM64.md) for the evidence. `use_iphop` is false in the arm64 profile, so
   host prediction is unexercised here.
+- **The iPHoP slot of `RESULTS_TSE` has never carried a real file.** iPHoP cannot run on
+  aarch64, so every run here passed the placeholder. `read_iphop()` was checked against
+  iPHoP's documented output and a fixture, not against a table this pipeline produced.
 - **`DB_GENOMAD`, `DB_CHECKAMG` and the fresh-download path of `DB_VCONTACT3` have never been
   run**; existing local databases were reused. Their verification functions were tested
   against real databases in both directions, but the download and publish steps were not.
