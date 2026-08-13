@@ -14,8 +14,13 @@ p <- add_argument(p, "--fin_checkv", help="quality_summary.tsv")
 p <- add_argument(p, "--fin_virsorter2", help="final-viral-score.tsv")
 p <- add_argument(p, "--fin_vibrant", help="VIBRANT_genome_quality_contigs.tsv")
 p <- add_argument(p, "--fin_dvf", help="dvf_virus.tsv")
+p <- add_argument(p, "--fin_genomad", help="virus_genomad_summary.tsv")
 p <- add_argument(p, "--fin_replicyc", help="putative_vcontigs_pref1.fasta.bacphlip")
 argv <- parse_args(p)
+
+# create_vpftse() treats fin_genomad as absent when it is NULL, but argparser
+# fills unsupplied arguments with NA, which read_genomad() would try to open.
+fin_genomad <- if (is.na(argv$fin_genomad)) NULL else argv$fin_genomad
 
 tse <- vpfkit::create_vpftse(fin_abcount = argv$fin_abcount,
                       fin_abtpm = argv$fin_abtpm,
@@ -26,7 +31,8 @@ tse <- vpfkit::create_vpftse(fin_abcount = argv$fin_abcount,
                       fin_virsorter2 = argv$fin_virsorter2,
                       fin_vibrant = argv$fin_vibrant,
                       fin_dvf = argv$fin_dvf,
-                      fin_replicyc = argv$fin_replicyc)
+                      fin_replicyc = argv$fin_replicyc,
+                      fin_genomad = fin_genomad)
 
 tse_vir <- vpfkit::create_vpftse_vir(tse)
 

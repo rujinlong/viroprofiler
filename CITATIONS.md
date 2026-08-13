@@ -7,8 +7,9 @@
 | Phamb         | Binning                             | MIT License |
 | CheckV        | Virus detection and QC              | BSD license |
 | VirSorter2    | Virus detection                     | GPL v2      |
-| DeepVirFinder | Virus detection                     | USC-RL v1.0 |
+| geNomad       | Virus detection                     | Apache 2.0  |
 | VIBRANT       | Virus detection and gene annotation | GPL v3      |
+| CheckAMG      | Auxiliary gene curation             | GPL v3      |
 | DRAM          | Gene annotation                     | GPL v3      |
 | eggnog-mapper | Gene annotation                     | GPL v3      |
 | abricate      | Gene annotation                     | GPL v2      |
@@ -53,8 +54,14 @@
 - [VirSorter2](https://github.com/jiarong/VirSorter2)
   > Guo, Jiarong, et al. "VirSorter2: a multi-classifier, expert-guided approach to detect diverse DNA and RNA viruses." Microbiome 9.1 (2021): 1-13.
 
-- [DeepVirFinder](https://github.com/jessieren/DeepVirFinder)
-  > Ren, Jie, et al. "Identifying viruses from metagenomic data using deep learning." Quantitative Biology 8.1 (2020): 64-77.
+- [geNomad](https://github.com/apcamargo/genomad)
+  > Camargo, Antonio Pedro, et al. "Identification of mobile genetic elements with geNomad." Nature Biotechnology 42.8 (2024): 1303-1312.
+
+- [CheckAMG](https://github.com/AnantharamanLab/CheckAMG)
+  > Kosmopoulos, James C., et al. CheckAMG: automated discovery and curation of Auxiliary
+  > Metabolic Genes (AMGs), Auxiliary Regulatory Genes (AReGs) and Auxiliary Physiology
+  > Genes (APGs) encoded by viral genomes. Anantharaman Lab.
+  > (Check the repository for the current citation before publishing.)
 
 - [VIBRANT](https://github.com/AnantharamanLab/VIBRANT)
   > Kieft, Kristopher, Zhichao Zhou, and Karthik Anantharaman. "VIBRANT: automated recovery, annotation and curation of microbial viruses, and evaluation of viral community function from genomic sequences." Microbiome 8.1 (2020): 1-23.

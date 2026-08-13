@@ -64,10 +64,10 @@ skipped on aarch64. `docker/viroprofiler-host/Dockerfile` pins
 `binfmt_misc` QEMU interpreter and produces an amd64 image that then has to run under
 emulation.
 
-## `viroprofiler-dvf` — DeepVirFinder
+## DeepVirFinder — removed, replaced by geNomad
 
-DeepVirFinder is frozen to a 2018 stack that bioconda/conda-forge never built for
-`linux-aarch64`. Solving `docker/viroprofiler-dvf/env_dvf.yml` for that platform fails:
+DeepVirFinder was frozen to a 2018 stack that bioconda/conda-forge never built for
+`linux-aarch64`. Solving its environment file for that platform failed:
 
 ```
 error    libmamba Could not solve for environment specs
@@ -78,13 +78,22 @@ error    libmamba Could not solve for environment specs
     └─ theano 1.0.3**  does not exist (perhaps a typo or a missing channel).
 ```
 
-`deepvirfinder` itself is not in bioconda at all; it comes from the `hcc` channel.
+`deepvirfinder` was not in bioconda at all; it came from the `hcc` channel, and it has had
+no release since 2020.
 
-**Consequence.** `DVF` is called unconditionally in `workflows/viroprofiler.nf` and
-`workflows/contig_anno.nf` — there is no `use_dvf` switch — while
-`conf/arm64_local.config` points the `viroprofiler_dvf` label at a SIF that
-`docker/build_arm64.sh` does not produce. A full run on aarch64 therefore stops at `DVF`
-unless an amd64 `viroprofiler-dvf.sif` is supplied and QEMU emulation is available.
+**Resolution.** `GENOMAD` replaced `DVF` in both workflows. geNomad does virus
+identification, provirus excision and marker-based gene annotation in one pass, and every
+one of its dependencies — including `mmseqs2` and `aragorn` — has a linux-aarch64 conda
+build, so `docker/viroprofiler-genomad/` builds natively on both architectures.
+
+`CHECKAMG` was added alongside it and is likewise architecture-neutral, with one caveat
+recorded in `docker/viroprofiler-checkamg/Dockerfile`: `torch_scatter` publishes no aarch64
+wheel and compiles from its sdist, and its `setup.py` imports torch at build time, so torch
+has to be installed before CheckAMG and the compile has to run with `--no-build-isolation`.
+
+**Consequence for PHAMB.** `run_RF.py` reads DeepVirFinder's per-contig score table
+directly, and PHAMB's random forest was trained on it. `--binning phamb` therefore now
+exits with an error rather than being fed a substitute; `--binning vrhyme` is unaffected.
 
 ## Re-checking these constraints
 

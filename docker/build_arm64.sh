@@ -4,8 +4,8 @@
 # SIF files for Apptainer.
 #
 # The images published on Docker Hub are amd64-only, so on arm64 they have to be rebuilt
-# from the Dockerfiles in this directory. Two images are deliberately absent: see
-# docs/dev/ARM64.md for why iPHoP and DeepVirFinder cannot be built for this architecture.
+# from the Dockerfiles in this directory. One image is deliberately absent: see
+# docs/dev/ARM64.md for why iPHoP cannot be built for this architecture.
 #
 # Usage:
 #   bash docker/build_arm64.sh                 # build everything, write SIFs to the default dir
@@ -18,7 +18,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAG="${TAG:-v0.3}"
 SIF_DIR="${SIF_DIR:-$HOME/singularity/viroprofiler}"
 
-ALL_IMAGES=(base qc abundance replicyc vibrant bracken virsorter2 vcontact3 geneannot binning viewer)
+ALL_IMAGES=(base qc abundance replicyc vibrant bracken virsorter2 vcontact3 geneannot binning viewer genomad checkamg)
 IMAGES=("${@:-}")
 [[ -z "${IMAGES[*]}" ]] && IMAGES=("${ALL_IMAGES[@]}")
 

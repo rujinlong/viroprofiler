@@ -1,0 +1,14 @@
+name: viroprofiler-genomad
+channels:
+    - conda-forge
+    - bioconda
+dependencies:
+    # Nextflow's trace observer calls `ps`; the micromamba base image has none.
+    - conda-forge::procps-ng
+    # geNomad pulls in the two executables it shells out to, `mmseqs` and
+    # `aragorn`. Both have linux-aarch64 builds, which is why this image is
+    # buildable on arm64 where the DeepVirFinder image it replaces was not.
+    - bioconda::genomad=1.12.0
+    # The GENOMAD process reshapes geNomad's summary tables with these.
+    - bioconda::seqkit
+    - bioconda::csvtk

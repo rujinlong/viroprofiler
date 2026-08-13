@@ -11,6 +11,7 @@ process RESULTS_TSE {
     path virsorter2_score
     path vibrant_quality
     path dvf_score
+    path genomad_score
     path replicyc_type
 
 
@@ -31,6 +32,7 @@ process RESULTS_TSE {
                  --fin_virsorter2 $virsorter2_score \\
                  --fin_vibrant $vibrant_quality \\
                  --fin_dvf $dvf_score \\
+                 --fin_genomad $genomad_score \\
                  --fin_replicyc $replicyc_type
     """
 

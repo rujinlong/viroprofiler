@@ -7,12 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- geNomad replaces DeepVirFinder as the reference-free virus caller (`GENOMAD` process,
+  `docker/viroprofiler-genomad/`, `DB_GENOMAD` setup process). It also supplies a topology
+  call, a taxonomy assignment and provirus coordinates; `bin/genomad_contig_table.py` maps
+  its per-virus rows back onto contig IDs and fails loudly rather than letting an unmatched
+  name silently drop a contig from the viral set
+- `--genomad_preset` and `--genomad_splits`
+- geNomad's per-contig virus score reaches the TSE through vpfkit's `fin_genomad` slot, so
+  `rowData` gains `genomad_score`, `genomad_fdr`, `genomad_topology`, `genomad_taxonomy`
+  and `genomad_n_hallmarks`, and `create_vpftse_vir()` counts a score >= 0.7 as viral
+  evidence
+- CheckAMG is the auxiliary-gene caller (`CHECKAMG` process,
+  `docker/viroprofiler-checkamg/`, `DB_CHECKAMG` setup process), distinguishing AMGs,
+  AReGs and APGs. DRAM-v is kept: its per-gene annotation table is complementary evidence,
+  not a competing AMG call
+- `--use_checkamg` and `--checkamg_min_weight`
+- `--use_vibrant`, so VIBRANT can be skipped. It is on by default
+- `vircontigs/putative_vcontigs_unmatched.list` records detector hits that name a sequence
+  absent from the contig library, which `seqkit grep` used to drop without a word
+
 - Single-end read support (`--single_end` parameter)
 - Stub test infrastructure for CI pipeline validation (51/51 processes covered)
 - GitHub Actions CI workflow with 5 stub test jobs (PE reads, SE reads, contig annotation, DB setup, optional modules)
 - Stub blocks for all 12 database setup processes in `setup_db.nf`
 - Stub test data files (`tests/data/`)
 - `test_stub` profile for lightweight pipeline topology testing without databases or containers
+
+### Removed
+
+- DeepVirFinder, `--use_dvf`, `--dvf_qvalue`, `--dvf_maxlen`, `docker/viroprofiler-dvf/`
+  and `bin/calc_qvalue.r`. It had no release since 2020 and no linux-aarch64 build in any
+  version (theano 1.0.3 / keras 2.2.4)
+- `--binning phamb`, which now exits with an error. PHAMB's random forest reads
+  DeepVirFinder's per-contig score table directly and was trained on it; geNomad's scores
+  are not a drop-in substitute, and feeding the forest a stand-in would change which bins
+  are called viral without saying so. `--binning vrhyme` is unaffected
 
 ### Fixed
 

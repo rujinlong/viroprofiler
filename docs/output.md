@@ -14,12 +14,13 @@ output
 ├── bacphlip
 ├── checkv
 ├── contiglib
+├── checkamg
 ├── dramv
-├── dvf
 ├── emapper
 ├── fastp
 ├── fastqc
 ├── genepred4ctg
+├── genomad
 ├── mapping2contigs
 ├── multiqc
 ├── nrgene
@@ -89,7 +90,13 @@ Abundance of contigs or bins is estimated using clean reads mapped to the contig
 
 ### Viral sequence identification
 
-Viral sequences are identified using multiple tools in ViroProfiler (VirSorter2, VIBRANT, DeepVirFinder). Results from each tool are saved to separate files and merged into a final annotation file.
+Viral sequences are identified by geNomad, by CheckV's quality calls, and -- unless
+`--use_vibrant false` -- by VIBRANT. Results from each tool are saved to separate files, and
+their union is the candidate-virus set carried forward (`vircontigs/`). VirSorter2 runs on
+that set rather than contributing to it: it produces the affi-contigs table DRAM-v requires
+plus a per-contig score column. Any detector hit that names a sequence absent from the
+contig library is recorded in `vircontigs/putative_vcontigs_unmatched.list` instead of being
+dropped silently.
 
 ### Functional annotation
 

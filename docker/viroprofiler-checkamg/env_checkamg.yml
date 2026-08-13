@@ -1,0 +1,15 @@
+name: viroprofiler-checkamg
+channels:
+    - conda-forge
+dependencies:
+    # Nextflow's trace observer calls `ps`; the micromamba base image has none.
+    - conda-forge::procps-ng
+    # CheckAMG 1.1.x declares `Requires-Python: >=3.11`.
+    - conda-forge::python=3.11
+    - conda-forge::pip
+    # `torch_scatter` has no aarch64 wheel and compiles a C++ extension from its
+    # sdist; setuptools has to be present because that build runs with
+    # `--no-build-isolation` (see the Dockerfile).
+    - conda-forge::setuptools
+    - conda-forge::wheel
+    - conda-forge::cxx-compiler

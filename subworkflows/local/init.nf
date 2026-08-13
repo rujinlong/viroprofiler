@@ -1,11 +1,17 @@
-include { DB_CHECKV; DB_PHAMB; DB_VIRSORTER2; DB_DRAM; DB_VIBRANT; DB_IPHOP; DB_EGGNOG; DB_VOGDB; DB_MICOMPLETEDB; DB_VREFSEQ; DB_VCONTACT3; DB_KRAKEN2} from "../../modules/local/setup_db"
+include { DB_CHECKV; DB_PHAMB; DB_VIRSORTER2; DB_DRAM; DB_VIBRANT; DB_IPHOP; DB_EGGNOG; DB_VOGDB; DB_MICOMPLETEDB; DB_VREFSEQ; DB_VCONTACT3; DB_KRAKEN2; DB_GENOMAD; DB_CHECKAMG } from "../../modules/local/setup_db"
 
 workflow SETUP {
     main:
     DB_CHECKV()
-    DB_VIBRANT()
+    DB_GENOMAD()
     DB_VIRSORTER2()
 
+    if (params.use_vibrant) {
+        DB_VIBRANT()
+    }
+    if (params.use_checkamg) {
+        DB_CHECKAMG()
+    }
     if (params.use_dram) {
         DB_DRAM()
     }

@@ -155,6 +155,8 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 
 | <div style="width:180px">Parameter</div> | Required | Default | Description |
 | :--------------------------------------- | :------- | :------ | :---------- |
+| `--use_checkamg` | :material-close: | true | Use CheckAMG to curate auxiliary genes (AMG/AReG/APG) |
+| `--use_vibrant` | :material-close: | true | Run VIBRANT. It contributes a third opinion to the candidate-virus union and a genome quality call to the TSE; geNomad does detection and CheckAMG does auxiliary genes |
 | `--use_dram` | :material-close: | true | Use DRAM-v for functional annotation |
 | `--use_iphop` | :material-close: | true | Use iPHoP for viral-host prediction |
 | `--use_abricate` | :material-close: | false | Use abricate for AMR gene detection |
@@ -170,10 +172,12 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 | :--------------------------------------- | :------- | :------ | :---------- |
 | `--prot_cluster_min_similarity` | :material-close: | 0.7 | Minimum similarity of protein seqs in the same cluster |
 | `--prot_cluster_min_coverage` | :material-close: | 0.9 | Minimum similarity of protein seqs in the same cluster |
-| `--binning` | :material-close: | false | Which binning tool to use: `vrhyme`, `phamb`, or `false` |
+| `--binning` | :material-close: | false | Which binning tool to use: `vrhyme` or `false`. `phamb` is no longer supported: its random forest reads DeepVirFinder's score table, which the pipeline no longer produces |
 | `--binning_minlen_contig` | :material-close: | 2000 | Contigs shorter than this value will not be used for binning |
 | `--binning_minlen_bin` | :material-close: | 2000 | Bins shorter than this value will be removed from downstream analyses |
-| `--dvf_qvalue` | :material-close: | 0.1 | q-value used in `DeepVirFinder` |
+| `--genomad_preset` | :material-close: | "default" | geNomad post-classification filtering: `default`, `conservative` or `relaxed` |
+| `--genomad_splits` | :material-close: | 0 | Split geNomad's MMseqs2 marker search into this many chunks to cap memory use; 0 leaves it unsplit |
+| `--checkamg_min_weight` | :material-close: | 0.6 | Minimum CheckAMG AMG weight for an auxiliary gene to be reported; higher is more conservative |
 | `--virsorter2_groups` | :material-close: | "dsDNAphage" | Viral category detected by `VirSorter2`, could be any combination of `dsDNAphage,NCLDV,RNA,ssDNA,lavidaviridae` |
 | `--contig_minlen_vcontact3` | :material-close: | 10000 | Contigs/Bins short than this value will not be used in `vConTACT3` |
 | `--vcontact3_db_version` | :material-close: | 232 | vConTACT3 reference database version. Each vConTACT3 release accepts exactly one version |

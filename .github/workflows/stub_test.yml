@@ -202,6 +202,7 @@ jobs:
             --use_eggnog true \
             --use_abricate true \
             --binning vrhyme \
+            --use_vibrant false \
             --outdir output_stub_opts \
             2>&1 | tee nextflow_stub_opts.log
 

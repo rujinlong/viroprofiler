@@ -58,10 +58,10 @@ include { DECONTAM                     } from '../modules/local/decontam'
 include { CONTIGLIB; CONTIGLIB_CLUSTER } from '../modules/local/contig_library'
 include { CONTIGINDEX; MAPPING2CONTIGS2; ABUNDANCE   } from '../modules/local/abundance'
 include { BRACKEN; BRACKEN_COMBINEBRACKENOUTPUTS } from '../modules/local/bracken'
-include { DRAMV; EMAPPER; ABRICATE     } from '../modules/local/annotation'
+include { DRAMV; CHECKAMG; EMAPPER; ABRICATE } from '../modules/local/annotation'
 include { VIRALHOST_IPHOP              } from '../modules/local/viral_host'
 include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
-include { CHECKV; VIRSORTER2; DVF; VIRCONTIGS_PRE; VIBRANT           } from '../modules/local/viral_detection'
+include { CHECKV; VIRSORTER2; GENOMAD; VIRCONTIGS_PRE; VIBRANT       } from '../modules/local/viral_detection'
 include { GENEPRED as GENEPRED4CTG; NRSEQS as NRPROT; NRSEQS as NRGENE } from '../modules/local/gene_library'
 include { TAXONOMY_VCONTACT3; TAXONOMY_MMSEQS; TAXONOMY_MERGE          } from '../modules/local/taxonomy'
 include { RESULTS_TSE                  } from '../modules/local/base'
@@ -103,22 +103,17 @@ workflow CONTIGANNO {
     }
 
 
-    // Viral detection: DVF + CheckV MQ, HQ, Complete + VirSorter2 + VIBRANT
-    VIBRANT(ch_nrclib)
-    if (params.use_dvf) {
-        DVF(ch_nrclib)
-        ch_dvfscore = DVF.out.dvfscore_ch
-        ch_dvfseq = DVF.out.dvfseq_ch
-        ch_dvflist = DVF.out.dvflist_ch
+    // Viral detection: geNomad + CheckV MQ, HQ, Complete [+ VIBRANT]
+    GENOMAD(ch_nrclib)
+
+    if (params.use_vibrant) {
+        VIBRANT(ch_nrclib)
+        ch_vibrant_list = VIBRANT.out.vibrant_list_ch
     } else {
-        // DeepVirFinder pins theano 1.0.3 / keras 2.2.4 and cannot be built for aarch64.
-        // Feed an empty placeholder so the union in VIRCONTIGS_PRE still has a file to read.
-        ch_dvfscore = Channel.fromPath("${projectDir}/assets/no_dvf_scores.tsv").first()
-        ch_dvfseq = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
-        ch_dvflist = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
+        ch_vibrant_list = Channel.fromPath("${projectDir}/assets/no_vibrant_contigs.list").first()
     }
 
-    VIRCONTIGS_PRE(ch_nrclib, ch_dvflist, CHECKV.out.checkv2vContigs_ch, VIBRANT.out.vibrant_ch)
+    VIRCONTIGS_PRE(ch_nrclib, GENOMAD.out.genomad_list_ch, CHECKV.out.checkv2vContigs_ch, ch_vibrant_list)
     ch_putative_vList =  VIRCONTIGS_PRE.out.putative_vList_ch
     ch_putative_vContigs =  VIRCONTIGS_PRE.out.putative_vContigs_ch
     vContigs_and_vMAGs = ch_putative_vContigs
@@ -126,9 +121,13 @@ workflow CONTIGANNO {
     VIRSORTER2(ch_nrclib)        // for DRAM-v gene annotation and AMG detection
     ch_vs2contigs = VIRSORTER2.out.vs2_contigs_ch
 
-    // ANNOTATION (AMG)
+    // ANNOTATION (AMG). CheckAMG is the auxiliary-gene caller; DRAM-v is kept because
+    // its per-gene annotation table is complementary evidence, not a competing AMG call.
     if ( params.use_dram ) {
         DRAMV (ch_vs2contigs, VIRSORTER2.out.vs2_affi_ch)
+    }
+    if ( params.use_checkamg ) {
+        CHECKAMG (ch_putative_vContigs)
     }
 
     // Taxonomy

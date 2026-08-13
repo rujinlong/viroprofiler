@@ -9,7 +9,7 @@ usability defect · **P3** hygiene.
 
 | ID | Severity | Area | Status |
 |----|----------|------|--------|
-| [I-01](#i-01) | P0 | Containers — amd64-only images | Partly fixed — arm64 images build from `docker/`, except iPHoP and DVF |
+| [I-01](#i-01) | P0 | Containers — amd64-only images | Partly fixed — arm64 images build from `docker/`, except iPHoP. DeepVirFinder was retired in favour of geNomad, which builds on aarch64 |
 | [I-02](#i-02) | P0 | Containers — `viroprofiler-viewer` has no Dockerfile | Fixed |
 | [I-03](#i-03) | P0 | Config — `params.db` never bind-mounted into containers | Fixed |
 | [I-04](#i-04) | P1 | Test data — stub samplesheet uses launch-dir-relative paths | Fixed |

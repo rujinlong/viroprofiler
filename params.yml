@@ -7,9 +7,11 @@ outdir: "output"
 
 # =============================  Optional steps switch  =======================================
 use_abricate: false
+use_checkamg: true
 use_decontam: false
 use_dram: false
 use_eggnog: false
+use_vibrant: true
 use_iphop: false
 use_kraken2: false
 use_phamb: false
@@ -39,15 +41,18 @@ gene_cluster_min_similarity: 0.9 # Minimum similarity of gene DNA seqs in the sa
 gene_cluster_min_coverage: 0.9 # Minimum similarity of gene DNA seqs in the same cluster
 
 # =============================  Binning  =====================================
-binning: false # "phamb", "vrhyme" or false
+binning: false # "vrhyme" or false
 binning_minlen_contig: 5000
 binning_minlen_bin: 5000
-dvf_qvalue: 0.1
-dvf_maxlen: 1000000
 
 # =============================  Viral detection  =============================
 # virsorter2_groups: "dsDNAphage,NCLDV,RNA,ssDNA,lavidaviridae"
 virsorter2_groups: "dsDNAphage"
+genomad_preset: "default" # "default", "conservative" or "relaxed"
+genomad_splits: 0
+
+# =============================  Auxiliary genes  =============================
+checkamg_min_weight: 0.6
 
 # =============================  Taxonomy  ====================================
 contig_minlen_vcontact3: 10000

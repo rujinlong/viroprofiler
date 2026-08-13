@@ -204,20 +204,38 @@
             "description": "Parameters for viral detection softwares",
             "default": "",
             "properties": {
-                "dvf_qvalue": {
-                    "type": "number",
-                    "description": "DeepVirFinder q-value",
-                    "default": 0.1
+                "genomad_preset": {
+                    "type": "string",
+                    "description": "geNomad post-classification filtering preset",
+                    "default": "default",
+                    "enum": [
+                        "default",
+                        "conservative",
+                        "relaxed"
+                    ]
                 },
-                "dvf_maxlen": {
+                "genomad_splits": {
                     "type": "integer",
-                    "description": "DeepVirFinder maximum contig length",
-                    "default": 1000000
+                    "description": "Split geNomad's MMseqs2 marker search into this many chunks to cap memory use. 0 leaves it unsplit.",
+                    "default": 0
                 },
                 "virsorter2_groups": {
                     "type": "string",
                     "description": "Category of viruses, can be one or multiple of \"dsDNAphage,NCLDV,RNA,ssDNA,lavidaviridae\"",
                     "default": "dsDNAphage"
+                }
+            }
+        },
+        "auxiliary_gene_parameters": {
+            "title": "Auxiliary gene parameters",
+            "type": "object",
+            "description": "Parameters for auxiliary gene (AMG/AReG/APG) calling",
+            "default": "",
+            "properties": {
+                "checkamg_min_weight": {
+                    "type": "number",
+                    "description": "Minimum CheckAMG AMG weight for an auxiliary gene to be reported; higher is more conservative",
+                    "default": 0.6
                 }
             }
         },
@@ -326,10 +344,15 @@
                     "description": "Use DRAM for metabolic reconstruction",
                     "default": false
                 },
-                "use_dvf": {
+                "use_checkamg": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Run DeepVirFinder. It has no linux-aarch64 build; see docs/dev/ARM64.md."
+                    "description": "Run CheckAMG to curate auxiliary genes (AMG/AReG/APG)"
+                },
+                "use_vibrant": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run VIBRANT. It contributes a third opinion to the candidate-virus union and a genome quality call to the TSE; geNomad does detection and CheckAMG does auxiliary genes."
                 },
                 "input_contigs": {
                     "type": "string",
@@ -563,6 +586,9 @@
         },
         {
             "$ref": "#/definitions/viral_detection_parameters"
+        },
+        {
+            "$ref": "#/definitions/auxiliary_gene_parameters"
         },
         {
             "$ref": "#/definitions/taxonomy_assignment_parameters"
