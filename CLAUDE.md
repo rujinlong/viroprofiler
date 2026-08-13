@@ -81,11 +81,11 @@ INPUT_CHECK (samplesheet CSV)
 
 ### Container Strategy
 
-14 separate Docker images per functional group, built from `docker/` subdirectories. Images published to Docker Hub under `denglab/` org. Container versions defined in `conf/modules.config` via `withLabel` directives.
+15 separate Docker images per functional group, built from `docker/` subdirectories. Images published to Docker Hub under `denglab/` org. Container versions defined in `conf/modules.config` via `withLabel` directives.
 
 ### Helper Scripts
 
-`bin/` contains 17 Python/R/shell scripts called by processes (e.g., `run_checkv.sh`, `parse_mmseqsTaxa.py`, `create_tse.r`).
+`bin/` contains 15 Python/R/shell scripts called by processes (e.g., `run_checkv.sh`, `parse_mmseqsTaxa.py`, `create_tse.r`).
 
 ### Groovy Libraries
 
