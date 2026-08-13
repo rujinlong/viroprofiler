@@ -40,6 +40,10 @@ usability defect · **P3** hygiene.
 | [I-29](#i-29) | P1 | Databases — DRAM setup cannot tell a finished database from an abandoned one | Fixed |
 | [I-30](#i-30) | P0 | Databases — VOGDB moved its profiles into a subdirectory; DRAM builds an empty HMM file | Fixed |
 | [I-31](#i-31) | P1 | Databases — files unpacked by tar can land unreadable by their own owner | Fixed |
+| [I-32](#i-32) | P1 | Modules — vConTACT2 taxonomy derived from a SPAdes naming convention | Fixed — replaced by vConTACT3 |
+| [I-33](#i-33) | P0 | Containers — `RESULTS_TSE` cannot read its own gzipped abundance inputs | Open |
+| [I-34](#i-34) | P2 | Modules — `-max_target_seqs` makes contig dereplication depend on library size | Fixed — BLAST chain replaced by Vclust |
+| [I-35](#i-35) | P3 | Modules — exact duplicate contigs entered the O(n²) dereplication stage | Fixed |
 
 ---
 
@@ -721,3 +725,101 @@ This cannot be fixed from this repository as it stands, which is the point of
 [I-02](#i-02): the viewer image has no Dockerfile here, so `R.utils` cannot be
 added to it. Either that image gains a Dockerfile and the package, or
 `RESULTS_TSE` decompresses the three files before calling `create_tse.r`.
+
+<a id="i-34"></a>
+## I-34 — `-max_target_seqs` makes contig dereplication depend on library size (P2)
+
+`CONTIGLIB_CLUSTER` dereplicated the pooled contig library with the MIUViG recipe: an
+all-vs-all `blastn`, `anicalc.py` to turn the HSPs into ANI and coverage, and
+`aniclust.py` to cluster them greedily. The `blastn` call carried
+`-max_target_seqs 25000`, which reads like "keep the best 25000 hits" and is not that.
+It is a cutoff applied *during* the search, and NCBI documents that the hits it keeps are
+not guaranteed to be the best ones — the point of Shah *et al.*, "Misunderstood parameter
+of NCBI BLAST impacts the correctness of bioinformatics workflows", *Bioinformatics*
+35(9):1613–1614 (2019).
+
+The consequence for this pipeline is that a contig pair can stop being reported because of
+sequences that have nothing to do with either contig. A query, a 98%-identity full-length
+partner and `-max_target_seqs 5` (the same mechanism as 25000, at a size that is quick to
+run):
+
+```
+$ blastn -query q.fasta -db db_small -perc_identity 90 -max_target_seqs 5 ...
+library=small subjects=1  reported=1 partner_reported=1
+
+$ blastn -query q.fasta -db db_big   -perc_identity 90 -max_target_seqs 5 ...
+library=big   subjects=31 reported=5 partner_reported=0
+```
+
+The 30 sequences added to `db_big` are unrelated to the query–partner relationship, yet
+the partner is no longer reported at all, so `aniclust.py` never sees the edge and the two
+contigs land in different clusters. Representatives are the read-mapping reference for
+abundance and the input to viral detection, so a pair silently lost this way propagates
+into apparent abundance and viral calls. Nothing in the outputs records that it happened,
+and the effect grows with the number of samples pooled.
+
+**Fixed.** The chain is now Vclust 1.3.1 — a Kmer-db prefilter, LZ-ANI alignment, and
+greedy clustering — which has no equivalent per-query cap, so the result no longer depends
+on how many other contigs are in the library. `bin/anicalc.py`, `bin/aniclust.py` and
+`bin/parse_NRCLib_clusters.py` are deleted; `bin/parse_vclust_clusters.py` writes the same
+`repid`/`ctgid` table the pipeline published before. The thresholds keep their names and
+their meaning:
+
+| Old | New | Measure |
+|-----|-----|---------|
+| `--min_ani 95` | `--ani 0.95` | Vclust `ani` — identical nucleotides over the aligned region only |
+| `--min_tcov 85`, `--min_qcov 0` | `--qcov 0.85` | Vclust `qcov` — aligned fraction of the shorter contig, longer one unconstrained |
+
+`gani` and `tani` are the wrong measures here: `gani` divides by the whole query length, so
+it scores a contained contig as poorly as a diverged one, and `tani` is symmetric, so it
+cannot express containment at all. Setting `--rcov` alongside `--qcov` would demand that
+both sequences be covered, which is reciprocal-overlap clustering rather than containment.
+`--algorithm cd-hit` is used rather than Vclust's default `leiden` because it is the same
+greedy longest-first centroid scheme `aniclust.py` implemented.
+
+One class of representative does change. When two contigs in a cluster are exactly the same
+length, `aniclust.py` kept whichever came first in the FASTA, so the representative followed
+the order the samples happened to be pooled in; Vclust breaks the tie the same way every
+time. Both contigs are equally valid representatives, and the new choice is the reproducible
+one:
+
+```
+input order alpha,beta : aniclust -> alpha_first   vclust -> alpha_first
+input order beta,alpha : aniclust -> beta_second   vclust -> alpha_first
+```
+
+On the contig library of the two-sample run in this repository (23 contigs, 22 clusters),
+the substitution reproduces `contigs_nrclib.fasta` and `contigs_nrclib.dict` byte for byte
+and `contigs_ANIclst.tsv` row for row. That library is far too small to bound the change on
+its own, so it was repeated on 1600 sequences — 800 CheckV reference genomes plus derived
+fragments placed on both sides of the 95 %/85 % boundary: 824 of 825 clusters identical,
+1599 of 1600 contigs assigned the same representative, and the single disagreement a pair
+whose identity the two aligners estimate as 0.9507 (BLAST) and 0.9496 (LZ-ANI), i.e. astride
+the threshold rather than a difference in what the threshold means.
+
+End to end, the two-sample run (`-profile apptainer,arm64_local --use_dram false`) still
+completes and its two TreeSummarizedExperiment objects are byte identical to the ones the
+BLAST chain produced:
+
+```
+$ cmp <blast-run>/results/viroprofiler_output.rds <vclust-run>/results/viroprofiler_output.rds
+$ cmp <blast-run>/results/viroprofiler_output_all_contigs.rds <vclust-run>/results/viroprofiler_output_all_contigs.rds
+```
+
+`CONTIGLIB_CLUSTER` itself went from 3.3 s to 1.5 s on that library, which is far too small
+to say anything about how the two scale.
+
+<a id="i-35"></a>
+## I-35 — Exact duplicate contigs entered the O(n²) dereplication stage (P3)
+
+`CONTIGLIB` pools the contigs of every sample into one library, so a contig that several
+samples assembled identically appears once per sample. The all-vs-all `blastn` compared each
+of those copies against everything else, and `aniclust.py` then collapsed them again at the
+end.
+
+`CONTIGLIB_CLUSTER` now runs `vclust deduplicate` first, which drops contigs whose sequence
+is identical to another contig's, in either orientation, before the prefilter sees them. On
+the 1600-sequence set above that removed 115 sequences (7 %) with no change to the clustering.
+The ids it drops are not lost: `vclust deduplicate` writes a `.duplicates.txt` companion file,
+and `bin/parse_vclust_clusters.py` reads it back so that every contig in the library still
+appears in `contigs_ANIclst.tsv` under the representative of its cluster.

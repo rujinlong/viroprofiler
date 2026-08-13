@@ -6,6 +6,7 @@
 | vRhyme        | Binning                             | GPL v3      |
 | Phamb         | Binning                             | MIT License |
 | CheckV        | Virus detection and QC              | BSD license |
+| Vclust        | Contig library dereplication        | GPL v3      |
 | VirSorter2    | Virus detection                     | GPL v2      |
 | DeepVirFinder | Virus detection                     | USC-RL v1.0 |
 | VIBRANT       | Virus detection and gene annotation | GPL v3      |
@@ -49,6 +50,9 @@
 
 - [CheckV](https://bitbucket.org/berkeleylab/CheckV)
   > Nayfach, Stephen, et al. "CheckV assesses the quality and completeness of metagenome-assembled viral genomes." Nature biotechnology 39.5 (2021): 578-585.
+
+- [Vclust](https://github.com/refresh-bio/vclust)
+  > Zielezinski, Andrzej, et al. "Ultrafast and accurate sequence alignment and clustering of viral genomes." Nature Methods (2025).
 
 - [VirSorter2](https://github.com/jiarong/VirSorter2)
   > Guo, Jiarong, et al. "VirSorter2: a multi-classifier, expert-guided approach to detect diverse DNA and RNA viruses." Microbiome 9.1 (2021): 1-13.

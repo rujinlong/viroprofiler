@@ -29,6 +29,9 @@ contamref_idx: "/project/genomics/jru/data2/db/viroprofiler/contamination_refs/h
 assembler: "spades"
 assemblies: "scaffolds" # [contigs, scaffolds]
 contig_minlen: 5000
+# MIUViG species thresholds. Identity is measured over the aligned region only;
+# coverage is the aligned fraction of the SHORTER contig, so a short contig
+# contained in a longer one is absorbed by it.
 contig_cluster_min_similarity: 95 # 0-100
 contig_cluster_min_coverage: 85 # 0-100
 

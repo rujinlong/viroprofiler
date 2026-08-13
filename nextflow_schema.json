@@ -119,7 +119,7 @@
                 },
                 "contig_cluster_min_similarity": {
                     "type": "number",
-                    "description": "Minimum similarity of contigs in a contig cluster",
+                    "description": "Minimum percent identity, over the aligned region only, between two contigs in the same cluster (Vclust `ani`)",
                     "default": 95,
                     "minimum": 70,
                     "maximum": 100,
@@ -127,7 +127,7 @@
                 },
                 "contig_cluster_min_coverage": {
                     "type": "number",
-                    "description": "Minimum coverage of the shorter contig in a contig cluster",
+                    "description": "Minimum percent of the shorter contig that must be aligned for the two contigs to share a cluster; the longer contig is unconstrained, so a contained contig is absorbed (Vclust `qcov`)",
                     "default": 85,
                     "minimum": 30,
                     "maximum": 100,

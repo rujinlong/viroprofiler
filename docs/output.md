@@ -77,7 +77,9 @@ The first step of the long contig library analysis is to evaluate the quality of
 
 ### Contig clustering based on ANI
 
-The long contig library were then dereplicated using MGV clustering script (https://github.com/snayfach/MGV/tree/master/ani_cluster). After clustering, each cluster is roughly a viral species. The representative contig of each cluster is merged into a non-redundant contig library (nrclib), and used for downstream annotation and analysis. This step is to reduce the computational cost of downstream analysis.
+The long contig library is then dereplicated with [Vclust](https://github.com/refresh-bio/vclust): exact duplicates are collapsed first, a Kmer-db prefilter narrows the candidate pairs, LZ-ANI aligns the survivors, and the pairs are clustered greedily. Two contigs join the same cluster when they align at `--contig_cluster_min_similarity` percent identity or better **over the aligned region**, covering at least `--contig_cluster_min_coverage` percent **of the shorter contig**. Nothing is required of the longer contig, so a short contig contained in a longer one is absorbed by it. At the defaults (95 % and 85 %) this is the MIUViG species criterion, and each cluster is roughly a viral species.
+
+The representative contig of each cluster — the longest member — is merged into a non-redundant contig library (nrclib), and used for downstream annotation and analysis. This step is to reduce the computational cost of downstream analysis. `contigs_ANIclst.tsv` maps every contig in the library to the representative of its cluster.
 
 ### Binning (optional, using Phamb or vrhyme)
 

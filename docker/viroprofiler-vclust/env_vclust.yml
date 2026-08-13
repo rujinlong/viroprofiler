@@ -1,0 +1,13 @@
+name: base
+channels:
+    - conda-forge
+    - bioconda
+dependencies:
+    # Kmer-db prefilter + LZ-ANI aligner + clustering, used by CONTIGLIB_CLUSTER.
+    - bioconda::vclust=1.3.1
+    # seqkit pulls the representative contigs out of the library, samtools writes
+    # the sequence dictionary the binning modules read.
+    - bioconda::seqkit=2.10.0
+    - bioconda::samtools=1.21
+    # `ps` is required by Nextflow's task trace collector.
+    - conda-forge::procps-ng=4.0.0
