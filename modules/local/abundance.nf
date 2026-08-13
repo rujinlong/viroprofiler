@@ -146,6 +146,10 @@ process ABUNDANCE {
     path "abundance_contigs_rpkm.tsv.gz", emit: ab_rpkm_ch
     path "abundance_contigs_trimmed_mean.tsv.gz", emit: ab_trmean_ch
     path "abundance_contigs_reads_per_base.tsv.gz", emit: ab_rpb_ch
+    // CoverM reports "found N reads mapped out of M total" per sample on stderr. That is
+    // the only place the library size appears, and colData needs it to tell a low
+    // abundance from a shallow sample.
+    path "log_contig_count.txt", emit: ab_count_log_ch
 
     when:
     task.ext.when == null || task.ext.when
@@ -177,5 +181,6 @@ process ABUNDANCE {
     printf 'Contig\tsample1\n' | gzip > abundance_contigs_rpkm.tsv.gz
     printf 'Contig\tsample1\n' | gzip > abundance_contigs_trimmed_mean.tsv.gz
     printf 'Contig\tsample1\n' | gzip > abundance_contigs_reads_per_base.tsv.gz
+    printf "[INFO] In sample 'sample1', found 0 reads mapped out of 0 total (0.00%%)\n" > log_contig_count.txt
     """
 }

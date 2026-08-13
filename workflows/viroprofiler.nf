@@ -245,22 +245,13 @@ workflow VIROPROFILER {
                 ch_vibrant_list = VIBRANT.out.vibrant_list_ch
                 ch_vibrant_quality = VIBRANT.out.vibrant_quality_ch
             } else {
-                // Placeholders keep the union in VIRCONTIGS_PRE and the TSE assembly
-                // supplied with a file to read. The quality table carries one sentinel
-                // row: a header-only table makes R infer logical columns, which then
-                // fails to join against the character contig IDs. The sentinel matches
-                // no contig, and RESULTS_TSE joins from the contig side, so it never
-                // reaches the output.
+                // An empty contig list still has to reach VIRCONTIGS_PRE, which reads all
+                // three candidate sources unconditionally. RESULTS_TSE instead gets a
+                // placeholder and drops the argument, so a VIBRANT-less run produces a TSE
+                // with no vibrant_* columns rather than columns that are silently all NA.
                 ch_vibrant_list = Channel.fromPath("${projectDir}/assets/no_vibrant_contigs.list").first()
-                ch_vibrant_quality = Channel.fromPath("${projectDir}/assets/no_vibrant_quality.tsv").first()
+                ch_vibrant_quality = Channel.fromPath("${projectDir}/assets/optional/no_vibrant").first()
             }
-
-            // vpfkit 0.5.0 still takes fin_dvf as a required argument and
-            // create_vpftse_vir() indexes the dvf_score column it produces, so the slot
-            // has to be filled even though DeepVirFinder is gone from the pipeline. Same
-            // sentinel reasoning as above: it matches no contig and never reaches the
-            // output.
-            ch_dvf2vcontigs = Channel.fromPath("${projectDir}/assets/no_dvf_scores.tsv").first()
 
             VIRCONTIGS_PRE(ch_nrclib, ch_genomad_list, CHECKV.out.checkv2vContigs_ch, ch_vibrant_list)
             ch_putative_vList =  VIRCONTIGS_PRE.out.putative_vList_ch
@@ -306,13 +297,21 @@ workflow VIROPROFILER {
             // ANNOTATION (AMG). CheckAMG is the auxiliary-gene caller; DRAM-v is kept
             // because its per-gene annotation table is complementary evidence, not a
             // competing AMG call.
+            def no_file = { slot -> Channel.fromPath("${projectDir}/assets/optional/no_${slot}").first() }
+
             if ( params.use_dram ) {
                 DRAMV (ch_vs2contigs, VIRSORTER2.out.vs2_affi_ch)
                 ch_versions = ch_versions.mix(DRAMV.out.versions)
+                ch_dramv_annotations = DRAMV.out.dramv_annotations_ch
+            } else {
+                ch_dramv_annotations = no_file('dramv')
             }
             if ( params.use_checkamg ) {
                 CHECKAMG (vContigs_and_vMAGs)
                 ch_versions = ch_versions.mix(CHECKAMG.out.versions)
+                ch_checkamg = CHECKAMG.out.checkamg_ch
+            } else {
+                ch_checkamg = no_file('checkamg')
             }
 
             // Taxonomy
@@ -343,6 +342,9 @@ workflow VIROPROFILER {
             if ( params.use_iphop ) {
                 VIRALHOST_IPHOP(vContigs_and_vMAGs)
                 ch_versions = ch_versions.mix(VIRALHOST_IPHOP.out.versions)
+                ch_iphop_genus = VIRALHOST_IPHOP.out.iphop_genus_ch
+            } else {
+                ch_iphop_genus = no_file('iphop')
             }
 
             ch_versions = ch_versions.mix(VIRSORTER2.out.versions)
@@ -362,7 +364,31 @@ workflow VIROPROFILER {
             }
 
             // TreeSummarizedExperiment
-            RESULTS_TSE (ABUNDANCE.out.ab_count_ch, ABUNDANCE.out.ab_tpm_ch, ABUNDANCE.out.ab_trmean_ch, ABUNDANCE.out.ab_covfrac_ch, TAXONOMY_MERGE.out.taxa_tse_ch, CHECKV.out.checkv2vContigs_ch, VIRSORTER2.out.vs2_score_ch, ch_vibrant_quality, ch_dvf2vcontigs, ch_genomad_score, ch_replicyc)
+            // A sample metadata table is the only way colData gets anything beyond the
+            // sample name: INPUT_CHECK rejects a samplesheet that is not exactly three
+            // columns, so the phenotypes cannot travel with the reads.
+            ch_sample_metadata = params.sample_metadata
+                ? Channel.fromPath(params.sample_metadata, checkIfExists: true).first()
+                : no_file('sample_metadata')
+
+            RESULTS_TSE (
+                ABUNDANCE.out.ab_count_ch,
+                ABUNDANCE.out.ab_tpm_ch,
+                ABUNDANCE.out.ab_trmean_ch,
+                ABUNDANCE.out.ab_covfrac_ch,
+                TAXONOMY_MERGE.out.taxa_tse_ch,
+                CHECKV.out.checkv2vContigs_ch,
+                VIRSORTER2.out.vs2_score_ch,
+                ch_replicyc,
+                ch_vibrant_quality,
+                ch_genomad_score,
+                ch_checkamg,
+                ch_iphop_genus,
+                ch_dramv_annotations,
+                ch_putative_vList,
+                ABUNDANCE.out.ab_count_log_ch,
+                ch_sample_metadata
+            )
         }
 
         // Reporting runs for every mode, so that a run stopped early still says what it

@@ -64,7 +64,6 @@ include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
 include { CHECKV; VIRSORTER2; GENOMAD; VIRCONTIGS_PRE; VIBRANT       } from '../modules/local/viral_detection'
 include { GENEPRED as GENEPRED4CTG; NRSEQS as NRPROT; NRSEQS as NRGENE } from '../modules/local/gene_library'
 include { TAXONOMY_VITAP; TAXONOMY_VCONTACT3; TAXONOMY_MERGE } from '../modules/local/taxonomy'
-include { RESULTS_TSE                  } from '../modules/local/base'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

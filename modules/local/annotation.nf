@@ -10,6 +10,7 @@ process DRAMV {
     path "dramv-distill"
     path "dramv-annotate/genes.faa", emit: dramv_proteins_ch
     path "dramv-annotate/scaffolds.fna", emit: dramv_contigs_ch
+    path "dramv-annotate/annotations.tsv", emit: dramv_annotations_ch
     path "versions.yml", emit: versions
 
     when:
