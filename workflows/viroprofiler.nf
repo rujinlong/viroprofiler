@@ -58,10 +58,10 @@ include { DECONTAM                     } from '../modules/local/decontam'
 include { CONTIGLIB; CONTIGLIB_CLUSTER } from '../modules/local/contig_library'
 include { CONTIGINDEX; MAPPING2CONTIGS2; ABUNDANCE   } from '../modules/local/abundance'
 include { BRACKEN; BRACKEN_COMBINEBRACKENOUTPUTS } from '../modules/local/bracken'
-include { DRAMV; EMAPPER; ABRICATE     } from '../modules/local/annotation'
+include { DRAMV; CHECKAMG; EMAPPER; ABRICATE } from '../modules/local/annotation'
 include { VIRALHOST_IPHOP              } from '../modules/local/viral_host'
 include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
-include { CHECKV; VIRSORTER2; DVF; VIRCONTIGS_PRE; VIBRANT           } from '../modules/local/viral_detection'
+include { CHECKV; VIRSORTER2; GENOMAD; VIRCONTIGS_PRE; VIBRANT       } from '../modules/local/viral_detection'
 include { GENEPRED as GENEPRED4CTG; NRSEQS as NRPROT; NRSEQS as NRGENE } from '../modules/local/gene_library'
 include { TAXONOMY_VITAP; TAXONOMY_VCONTACT3; TAXONOMY_MMSEQS; TAXONOMY_MERGE } from '../modules/local/taxonomy'
 include { RESULTS_TSE                  } from '../modules/local/base'
@@ -210,28 +210,35 @@ workflow VIROPROFILER {
             // ch_versions = ch_versions.mix(ABUNDANCE.out.versions)
 
 
-            // Viral detection: DVF + CheckV MQ, HQ, Complete + VirSorter2 + VIBRANT
-            VIBRANT(ch_nrclib)
-            if (params.use_dvf) {
-                DVF(ch_nrclib)
-                ch_dvfscore = DVF.out.dvfscore_ch
-                ch_dvfseq = DVF.out.dvfseq_ch
-                ch_dvflist = DVF.out.dvflist_ch
-                ch_dvf2vcontigs = DVF.out.dvf2vContigs_ch
+            // Viral detection: geNomad + CheckV MQ, HQ, Complete [+ VIBRANT]
+            GENOMAD(ch_nrclib)
+            ch_genomad_list = GENOMAD.out.genomad_list_ch
+            ch_genomad_score = GENOMAD.out.genomad_score_ch
+            ch_versions = ch_versions.mix(GENOMAD.out.versions)
+
+            if (params.use_vibrant) {
+                VIBRANT(ch_nrclib)
+                ch_vibrant_list = VIBRANT.out.vibrant_list_ch
+                ch_vibrant_quality = VIBRANT.out.vibrant_quality_ch
             } else {
-                // DeepVirFinder pins theano 1.0.3 / keras 2.2.4 and cannot be built for
-                // aarch64. Feed placeholders so the union in VIRCONTIGS_PRE and the TSE
-                // assembly still have a file to read. The score table carries one sentinel
-                // row: a header-only table makes R infer logical columns, which then fails
-                // to join against the character contig IDs. The sentinel matches no contig,
-                // and RESULTS_TSE joins from the contig side, so it never reaches the output.
-                ch_dvfscore = Channel.fromPath("${projectDir}/assets/no_dvf_scores.tsv").first()
-                ch_dvfseq = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
-                ch_dvflist = Channel.fromPath("${projectDir}/assets/no_dvf_contigs.list").first()
-                ch_dvf2vcontigs = Channel.fromPath("${projectDir}/assets/no_dvf_scores.tsv").first()
+                // Placeholders keep the union in VIRCONTIGS_PRE and the TSE assembly
+                // supplied with a file to read. The quality table carries one sentinel
+                // row: a header-only table makes R infer logical columns, which then
+                // fails to join against the character contig IDs. The sentinel matches
+                // no contig, and RESULTS_TSE joins from the contig side, so it never
+                // reaches the output.
+                ch_vibrant_list = Channel.fromPath("${projectDir}/assets/no_vibrant_contigs.list").first()
+                ch_vibrant_quality = Channel.fromPath("${projectDir}/assets/no_vibrant_quality.tsv").first()
             }
 
-            VIRCONTIGS_PRE(ch_nrclib, ch_dvflist, CHECKV.out.checkv2vContigs_ch, VIBRANT.out.vibrant_ch)
+            // vpfkit 0.5.0 still takes fin_dvf as a required argument and
+            // create_vpftse_vir() indexes the dvf_score column it produces, so the slot
+            // has to be filled even though DeepVirFinder is gone from the pipeline. Same
+            // sentinel reasoning as above: it matches no contig and never reaches the
+            // output.
+            ch_dvf2vcontigs = Channel.fromPath("${projectDir}/assets/no_dvf_scores.tsv").first()
+
+            VIRCONTIGS_PRE(ch_nrclib, ch_genomad_list, CHECKV.out.checkv2vContigs_ch, ch_vibrant_list)
             ch_putative_vList =  VIRCONTIGS_PRE.out.putative_vList_ch
             ch_putative_vContigs =  VIRCONTIGS_PRE.out.putative_vContigs_ch
 
@@ -239,8 +246,13 @@ workflow VIROPROFILER {
             // Binning (optional)
             if ( params.binning ) {
                 if ( params.binning == "phamb" ) {
-                    vMAG_PHAMB(ch_nrclib, ch_dvfscore, ch_bams)
-                    vContigs_and_vMAGs = vMAG_PHAMB.out
+                    // PHAMB's random forest was trained on DeepVirFinder's per-contig
+                    // score table and `run_RF.py` reads it directly. geNomad's scores are
+                    // not a drop-in substitute -- different model, different calibration --
+                    // and quietly feeding the forest something it was not trained on would
+                    // change which bins are called viral without saying so. Fail instead.
+                    exit 1, "--binning phamb needs DeepVirFinder's score table, which this pipeline no longer produces.\n" +
+                            "Use --binning vrhyme, or pin an older ViroProfiler release if PHAMB is required."
                 } else if ( params.binning == "vrhyme" ) {
                     vMAG_VRHYME(ch_putative_vContigs, ch_gene_all, ch_prot_all, ch_bams)
                     vContigs_and_vMAGs = vMAG_VRHYME.out
@@ -252,10 +264,16 @@ workflow VIROPROFILER {
             VIRSORTER2(vContigs_and_vMAGs)        // for DRAM-v gene annotation and AMG detection
             ch_vs2contigs = VIRSORTER2.out.vs2_contigs_ch
 
-            // ANNOTATION (AMG)
+            // ANNOTATION (AMG). CheckAMG is the auxiliary-gene caller; DRAM-v is kept
+            // because its per-gene annotation table is complementary evidence, not a
+            // competing AMG call.
             if ( params.use_dram ) {
                 DRAMV (ch_vs2contigs, VIRSORTER2.out.vs2_affi_ch)
                 ch_versions = ch_versions.mix(DRAMV.out.versions)
+            }
+            if ( params.use_checkamg ) {
+                CHECKAMG (vContigs_and_vMAGs)
+                ch_versions = ch_versions.mix(CHECKAMG.out.versions)
             }
 
             // Taxonomy
@@ -313,7 +331,7 @@ workflow VIROPROFILER {
             }
 
             // TreeSummarizedExperiment
-            RESULTS_TSE (ABUNDANCE.out.ab_count_ch, ABUNDANCE.out.ab_tpm_ch, ABUNDANCE.out.ab_trmean_ch, ABUNDANCE.out.ab_covfrac_ch, TAXONOMY_MERGE.out.taxa_mmseqs_ch, CHECKV.out.checkv2vContigs_ch, VIRSORTER2.out.vs2_score_ch, VIBRANT.out.vibrant_quality_ch, ch_dvf2vcontigs, ch_replicyc)
+            RESULTS_TSE (ABUNDANCE.out.ab_count_ch, ABUNDANCE.out.ab_tpm_ch, ABUNDANCE.out.ab_trmean_ch, ABUNDANCE.out.ab_covfrac_ch, TAXONOMY_MERGE.out.taxa_mmseqs_ch, CHECKV.out.checkv2vContigs_ch, VIRSORTER2.out.vs2_score_ch, ch_vibrant_quality, ch_dvf2vcontigs, ch_genomad_score, ch_replicyc)
 
             CUSTOM_DUMPSOFTWAREVERSIONS (
                 ch_versions.unique().collectFile(name: 'collated_versions.yml')

@@ -9,9 +9,11 @@ use_kraken2: false
 use_iphop: false
 use_eggnog: false
 use_abricate: false
+use_checkamg: true
 use_dram: false
 use_phamb: false
 use_decontam: false
+use_vibrant: true
 
 # =============================  Optional steps parameters  =======================================
 # kraken2 + bracken
@@ -42,11 +44,9 @@ gene_cluster_min_similarity: 0.9    # Minimum similarity of gene DNA seqs in the
 gene_cluster_min_coverage: 0.9   # Minimum similarity of gene DNA seqs in the same cluster
 
 # =============================  Binning  =====================================
-binning: false   # "phamb", "vrhyme" or false
+binning: false   # "vrhyme" or false
 binning_minlen_contig: 2000
 binning_minlen_bin: 2000
-dvf_maxlen: 1000000
-dvf_qvalue: 0.1
 
 
 # =============================  Viral detection  =============================

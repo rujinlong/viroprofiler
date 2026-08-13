@@ -57,7 +57,8 @@ INPUT_CHECK (samplesheet CSV)
   -> [parallel branches]:
      |- Gene library: GENEPRED -> NRPROT/NRGENE [-> EMAPPER, ABRICATE]
      |- Abundance: CONTIGINDEX -> MAPPING2CONTIGS2 -> ABUNDANCE
-     |- Viral detection: VIBRANT + DVF -> VIRCONTIGS_PRE [-> binning] -> VIRSORTER2 [-> DRAMV]
+     |- Viral detection: GENOMAD [+ VIBRANT] + CheckV quality -> VIRCONTIGS_PRE
+     |  [-> binning] -> VIRSORTER2 [-> DRAMV], and CHECKAMG on the candidate viruses
      |- Taxonomy: TAXONOMY_VITAP + TAXONOMY_VCONTACT3 + TAXONOMY_MMSEQS -> TAXONOMY_MERGE
      |- Host prediction: VIRALHOST_IPHOP
      |- Replication cycle: BACPHLIP or REPLIDEC
@@ -85,7 +86,9 @@ INPUT_CHECK (samplesheet CSV)
 
 ### Helper Scripts
 
-`bin/` contains 15 Python/R/shell scripts called by processes (e.g., `run_checkv.sh`, `parse_mmseqsTaxa.py`, `create_tse.r`).
+`bin/` contains the Python/R/shell scripts called by processes (e.g., `run_checkv.sh`,
+`parse_mmseqsTaxa.py`, `merge_taxonomy.py`, `genomad_contig_table.py`,
+`parse_vclust_clusters.py`, `create_tse.r`).
 
 ### Groovy Libraries
 
@@ -93,11 +96,13 @@ INPUT_CHECK (samplesheet CSV)
 
 ## Key Parameters
 
-Optional modules controlled by `use_*` flags: `use_dram` (true), `use_iphop` (true), `use_vitap` (true), `use_eggnog` (false), `use_kraken2` (false), `use_phamb` (false), `use_abricate` (false), `use_decontam` (false).
+Optional modules controlled by `use_*` flags: `use_dram` (true), `use_iphop` (true), `use_vitap` (true), `use_checkamg` (true), `use_vibrant` (true), `use_eggnog` (false), `use_kraken2` (false), `use_phamb` (false), `use_abricate` (false), `use_decontam` (false).
 
 Taxonomy sources are merged by `bin/merge_taxonomy.py`, which resolves each rank independently from ranked `--source NAME PRIORITY FILE` triples (smaller priority wins): VITAP 1, geNomad 2, vConTACT3 3, MMseqs2 4.
 
-Binning: `params.binning` = false | "phamb" | "vrhyme".
+Binning: `params.binning` = false | "vrhyme". `"phamb"` errors out — PHAMB's random forest reads DeepVirFinder's score table, which the pipeline no longer produces.
+
+Detection vs. downstream tools: geNomad, CheckV quality and (optionally) VIBRANT are the detectors whose union `VIRCONTIGS_PRE` forms. VirSorter2 is **not** a detector here — it runs on the already-selected candidates to produce `viral-affi-contigs-for-dramv.tab`, without which `DRAM-v.py distill` raises `KeyError` on the missing `auxiliary_score` column.
 
 ## Branch Strategy
 

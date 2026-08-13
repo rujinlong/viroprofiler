@@ -88,7 +88,7 @@ process {
         memory = "40 GB"
     }
 
-    withName: DVF {
+    withName: GENOMAD {
         cpus = 8
         memory = "60 GB"
     }

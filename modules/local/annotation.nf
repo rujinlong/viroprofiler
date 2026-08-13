@@ -48,6 +48,79 @@ process DRAMV {
 }
 
 
+process CHECKAMG {
+    label "viroprofiler_checkamg"
+
+    input:
+    path(contigs)
+
+    output:
+    path("checkamg_results"), emit: checkamg_ch
+    path("versions.yml"), emit: versions
+
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    def args = task.ext.args ?: ''
+    """
+    # CheckAMG drives its own Snakemake workflow, and Snakemake writes into
+    # \$HOME. Nextflow runs Apptainer with --no-home, so \$HOME is a read-only
+    # stub; point it at the task directory, as VIRSORTER2 and DRAMV do.
+    export HOME=\$PWD
+
+    # `-m` is a hard ceiling CheckAMG enforces on itself -- it aborts rather
+    # than exceeding it -- so it has to track what Nextflow actually granted the
+    # task, not a fixed default derived from the whole machine.
+    checkamg annotate \\
+        -i $contigs \\
+        -d ${params.db}/checkamg \\
+        -o checkamg_out \\
+        -l $params.contig_minlen \\
+        -amg $params.checkamg_min_weight \\
+        -t $task.cpus \\
+        -m ${task.memory.toGiga()} \\
+        $args
+
+    # Publish the tables and the log, not the Snakemake bookkeeping under
+    # `.snakemake/` (thousands of files, and symlinks that point into the work
+    # directory). `-L` because the FASTA subdirectories contain symlinks.
+    mkdir -p checkamg_results
+    cp -rL checkamg_out/results/. checkamg_results/
+    cp checkamg_out/CheckAMG_annotate.log checkamg_results/
+
+    # The one table that proves the run produced curated calls rather than
+    # stopping early: CheckAMG exits 0 after writing nothing if every contig is
+    # filtered out before the curation step.
+    test -s checkamg_results/final_results.tsv || {
+        echo "CheckAMG finished but wrote no final_results.tsv; see checkamg_results/CheckAMG_annotate.log." >&2
+        exit 1
+    }
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        CheckAMG: \$(checkamg --version 2>&1 | grep -o 'CheckAMG .*' | sed 's/CheckAMG //')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    mkdir -p checkamg_results
+    printf 'Protein\tContig\tGenome\tProtein Classification\n' > checkamg_results/final_results.tsv
+    printf 'stub_gene_1\tstub_NODE_1_length_5000_cov_100\tstub_NODE_1_length_5000_cov_100\tAMG\n' >> checkamg_results/final_results.tsv
+    printf 'Protein\tContig\n' > checkamg_results/metabolic_genes_curated.tsv
+    printf 'Protein\tContig\n' > checkamg_results/regulation_genes_curated.tsv
+    printf 'Protein\tContig\n' > checkamg_results/physiology_genes_curated.tsv
+    touch checkamg_results/CheckAMG_annotate.log
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        CheckAMG: 1.1.1
+    END_VERSIONS
+    """
+}
+
+
 process MICOMPLETEDB{
     label "viroprofiler_base"
     

@@ -112,39 +112,88 @@ process VIRSORTER2 {
 }
 
 
-process DVF {
-    label "viroprofiler_dvf"
+process GENOMAD {
+    label "viroprofiler_genomad"
 
     input:
     path(contigs)
 
     output:
-    path("*")
-    path("dvf_virus.tsv"), emit: dvf2vContigs_ch
-    path("virus_dvf.list"), emit: dvflist_ch
-    path("*_dvfpred.txt"), emit: dvfscore_ch
-    path("dvf.fasta"), emit: dvfseq_ch
+    path("virus_genomad.list"), emit: genomad_list_ch
+    path("virus_genomad_summary.tsv"), emit: genomad_score_ch
+    path("genomad_raw_virus_summary.tsv")
+    path("genomad_plasmid_summary.tsv")
+    path("genomad_provirus.tsv")
+    path("genomad_virus.fna")
+    path("genomad_taxonomy.tsv")
+    path("versions.yml"), emit: versions
 
     when:
     task.ext.when == null || task.ext.when
 
     script:
+    def args = task.ext.args ?: ''
+    // The presets and the individual thresholds are mutually exclusive in
+    // `end-to-end`; geNomad rejects the combination outright.
+    def preset = params.genomad_preset == "default" ? "" : "--${params.genomad_preset}"
+    def splits = params.genomad_splits > 0 ? "--splits ${params.genomad_splits}" : ""
     """
-    export OMP_NUM_THREADS=$task.cpus
-    seqkit seq -M $params.dvf_maxlen $contigs > contigs_maxlen.fasta
-    dvf.py -i contigs_maxlen.fasta -o . -c $task.cpus
-    dvf_output=\$(ls *_dvfpred.txt)
-    calc_qvalue.r \${dvf_output} $params.dvf_qvalue dvf_virus.tsv
-    sed 1d dvf_virus.tsv | cut -f1 > virus_dvf.list
-    seqkit grep -f virus_dvf.list $contigs > dvf.fasta
+    # geNomad names every output file after the stem of its input, so give it a
+    # stem this process controls rather than deriving one from whatever the
+    # upstream library file happens to be called.
+    ln -s $contigs genomad_input.fna
+
+    genomad end-to-end \\
+        --threads $task.cpus \\
+        $preset $splits $args \\
+        genomad_input.fna genomad_out ${params.db}/genomad
+
+    SUMMARY_DIR=genomad_out/genomad_input_summary
+    cp \$SUMMARY_DIR/genomad_input_virus_summary.tsv genomad_raw_virus_summary.tsv
+    cp \$SUMMARY_DIR/genomad_input_plasmid_summary.tsv genomad_plasmid_summary.tsv
+    cp \$SUMMARY_DIR/genomad_input_virus.fna genomad_virus.fna
+    cp genomad_out/genomad_input_annotate/genomad_input_taxonomy.tsv genomad_taxonomy.tsv
+
+    # `--disable-find-proviruses` (reachable through ext.args) skips the module
+    # that writes this table. An empty one keeps the declared outputs satisfied
+    # and makes genomad_contig_table.py fall back to parsing the provirus
+    # naming convention.
+    PROVIRUS=genomad_out/genomad_input_find_proviruses/genomad_input_provirus.tsv
+    if [ -f "\$PROVIRUS" ]; then
+        cp "\$PROVIRUS" genomad_provirus.tsv
+    else
+        printf 'seq_name\\tsource_seq\\tstart\\tend\\n' > genomad_provirus.tsv
+    fi
+
+    # geNomad reports one row per virus, which is not one row per contig once
+    # proviruses have been excised. Everything downstream keys on contig IDs.
+    genomad_contig_table.py \\
+        --summary genomad_raw_virus_summary.tsv \\
+        --contigs $contigs \\
+        --provirus genomad_provirus.tsv \\
+        --out-prefix virus_genomad
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        geNomad: \$(genomad --version | sed 's/.*version //')
+    END_VERSIONS
     """
 
     stub:
     """
-    printf 'name\tlen\tscore\tpvalue\n' > contigs_dvfpred.txt
-    printf 'name\tlen\tscore\tpvalue\tqvalue\n' > dvf_virus.tsv
-    printf 'stub_NODE_1_length_5000_cov_100\n' > virus_dvf.list
-    printf '>stub_NODE_1_length_5000_cov_100\nACGTACGT\n' > dvf.fasta
+    printf 'seq_name\\tlength\\ttopology\\tcoordinates\\tn_genes\\tgenetic_code\\tvirus_score\\tfdr\\tn_hallmarks\\tmarker_enrichment\\ttaxonomy\\n' > genomad_raw_virus_summary.tsv
+    printf 'stub_NODE_1_length_5000_cov_100\\t5000\\tNo terminal repeats\\tNA\\t5\\t11\\t0.99\\tNA\\t1\\t5.0\\tViruses\\n' >> genomad_raw_virus_summary.tsv
+    cp genomad_raw_virus_summary.tsv virus_genomad_summary.tsv
+    printf 'stub_NODE_1_length_5000_cov_100\\n' > virus_genomad.list
+    printf 'seq_name\\tlength\\ttopology\\tcoordinates\\tn_genes\\tgenetic_code\\tplasmid_score\\tfdr\\tn_hallmarks\\tmarker_enrichment\\tconjugation_genes\\tamr_genes\\n' > genomad_plasmid_summary.tsv
+    printf 'seq_name\\tsource_seq\\tstart\\tend\\n' > genomad_provirus.tsv
+    printf '>stub_NODE_1_length_5000_cov_100\\nACGTACGT\\n' > genomad_virus.fna
+    printf 'seq_name\\tn_genes_with_taxonomy\\tagreement\\ttaxid\\tlineage\\n' > genomad_taxonomy.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        geNomad: 1.12.0
+    END_VERSIONS
     """
 }
 
@@ -156,6 +205,7 @@ process VIBRANT {
 
     output:
     path("VIBRANT_*"), emit: vibrant_ch
+    path("virus_vibrant.list"), emit: vibrant_list_ch
     path("VIBRANT_contigs/VIBRANT_results_contigs/VIBRANT_genome_quality_contigs.tsv"), emit: vibrant_quality_ch
 
     when:
@@ -165,6 +215,31 @@ process VIBRANT {
     """
     ln -s $contigs contigs.fasta
     VIBRANT_run.py -i contigs.fasta -d $params.db/vibrant/databases -m $params.db/vibrant/files -t $task.cpus -virome
+
+    # VIBRANT's contribution to the candidate-virus union, emitted here rather
+    # than read out of the results directory by VIRCONTIGS_PRE, so that VIBRANT
+    # can be switched off without VIRCONTIGS_PRE having to know. `sed` rather
+    # than `seqkit`, which this image does not carry; the names it produces are
+    # the same ones `seqkit fx2tab -n` used to produce, verbatim FASTA headers.
+    #
+    # Insist the results directory itself is there. Only the FASTA inside it is allowed
+    # to be missing or empty, which is how VIBRANT reports "no phages found". Without
+    # that distinction a VIBRANT layout change would read as zero detections and drop
+    # every VIBRANT-only contig from the union without a word -- whereas the previous
+    # code, which cat'ed this path directly in VIRCONTIGS_PRE, failed loudly.
+    PHAGE_DIR=VIBRANT_contigs/VIBRANT_phages_contigs
+    if [ ! -d "\$PHAGE_DIR" ]; then
+        echo "VIBRANT produced no \$PHAGE_DIR directory. Its output layout has changed," >&2
+        echo "so the list of VIBRANT phage contigs cannot be built." >&2
+        exit 1
+    fi
+    PHAGES=\$PHAGE_DIR/contigs.phages_combined.fna
+    if [ -s "\$PHAGES" ]; then
+        sed -n 's/^>//p' "\$PHAGES" > virus_vibrant.list
+    else
+        echo "VIBRANT reported no phage contigs." >&2
+        : > virus_vibrant.list
+    fi
     """
 
     stub:
@@ -173,6 +248,7 @@ process VIBRANT {
     mkdir -p VIBRANT_contigs/VIBRANT_phages_contigs
     printf 'contig\tquality\n' > VIBRANT_contigs/VIBRANT_results_contigs/VIBRANT_genome_quality_contigs.tsv
     printf '>stub_phage\nACGTACGT\n' > VIBRANT_contigs/VIBRANT_phages_contigs/contigs.phages_combined.fna
+    printf 'stub_phage\n' > virus_vibrant.list
     """
 }
 
@@ -182,28 +258,39 @@ process VIRCONTIGS_PRE {
 
     input:
     path(nrclib)
-    path(dvflist)
+    path(genomad_list)
     path(checkv_quality)
-    path(vibrant_dir)
+    path(vibrant_list)
 
     output:
     path("putative_vcontigs_pref1.fasta"), emit: putative_vContigs_ch
     path("putative_vcontigs_pref1.list"), emit: putative_vList_ch
+    path("putative_vcontigs_unmatched.list")
 
     when:
     task.ext.when == null || task.ext.when
 
     script:
     """
-    cat ${vibrant_dir}/VIBRANT_phages_contigs/contigs.phages_combined.fna | seqkit fx2tab -n > vibrant_vcontigs.list
     csvtk grep -t -r -f checkv_quality -p 'Complete|High-quality|Medium-quality|Low-quality' $checkv_quality | cut -f1 | sed 1d > checkv_vcontigs.list
-    cat $dvflist checkv_vcontigs.list vibrant_vcontigs.list | sort -u > putative_vcontigs_pref1.list
+    cat $genomad_list checkv_vcontigs.list $vibrant_list | sed '/^\$/d' | sort -u > putative_vcontigs_pref1.list
     seqkit grep -f putative_vcontigs_pref1.list $nrclib > putative_vcontigs_pref1.fasta
+
+    # `seqkit grep` drops names it cannot find without saying so, and the
+    # detectors do not all name sequences the way the contig library does --
+    # VIBRANT reports excised prophages as `<contig>_fragment_N`, for instance.
+    # Those names silently vanish from the viral set, so record them.
+    seqkit fx2tab -n -i putative_vcontigs_pref1.fasta | sort -u > matched_vcontigs.list
+    comm -23 putative_vcontigs_pref1.list matched_vcontigs.list > putative_vcontigs_unmatched.list
+    if [ -s putative_vcontigs_unmatched.list ]; then
+        echo "WARNING: \$(wc -l < putative_vcontigs_unmatched.list) name(s) called viral by a detector are absent from the contig library and were dropped; see putative_vcontigs_unmatched.list" >&2
+    fi
     """
 
     stub:
     """
     printf '>stub_NODE_1_length_5000_cov_100\nACGTACGTACGT\n' > putative_vcontigs_pref1.fasta
     printf 'stub_NODE_1_length_5000_cov_100\n' > putative_vcontigs_pref1.list
+    : > putative_vcontigs_unmatched.list
     """
 }

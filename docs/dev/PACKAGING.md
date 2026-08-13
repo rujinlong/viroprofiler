@@ -423,8 +423,11 @@ compared on real data before anything is removed.
 1. Keep `bioconda::virsorter=2.2.4`; lock it. Do not fork.
 2. Add `--use_virsorter2` (defaulting to `params.use_dram`, which is what actually needs it) so
    runs that skip AMG annotation avoid an unmaintained tool and an 11 GB database.
-3. Add geNomad as a detection option and evaluate it against DeepVirFinder on real data. If it
-   holds up, retire DeepVirFinder and delete `docker/viroprofiler-dvf/`.
+3. ~~Add geNomad as a detection option and evaluate it against DeepVirFinder on real data. If it
+   holds up, retire DeepVirFinder and delete `docker/viroprofiler-dvf/`.~~ **Done.** `GENOMAD`
+   took DeepVirFinder's place in both workflows, `docker/viroprofiler-dvf/` is deleted, and
+   `--binning phamb` now errors out because PHAMB's random forest reads DeepVirFinder's score
+   table directly. See [ARM64.md](ARM64.md).
 4. Revisit VirSorter2 only when the DRAM-v auxiliary-score product is itself retired or
    replaced — that is a scientific decision about the AMG deliverable, not a packaging one.
 

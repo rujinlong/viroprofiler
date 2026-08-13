@@ -42,6 +42,152 @@ process DB_CHECKV {
 }
 
 
+process DB_GENOMAD {
+    label "viroprofiler_genomad"
+    label "setup"
+
+    when:
+    params.mode == "setup"
+
+    script:
+    """
+    GENOMAD_DB="${params.db}/genomad"
+
+    # geNomad refuses to start when its marker database is incomplete, but it
+    # says so only after the annotate module has already begun. Check up front,
+    # and check the files the marker search actually opens rather than the
+    # directory: `download-database` untars an archive it streams from Zenodo,
+    # and an interrupted download leaves a directory that looks finished.
+    #
+    # The three marker sets are mmseqs profile databases, so `mmseqs dbtype`
+    # answers "Profile" for an intact one. Match that answer rather than the
+    # exit status: `mmseqs dbtype` returns 0 on a path that is not a database at
+    # all, so `|| return 1` would pass anything.
+    check_db () {
+        [ -s "\$1/version.txt" ] || return 1
+        [ -s "\$1/genomad_marker_metadata.tsv" ] || return 1
+        [ -s "\$1/names.dmp" ] || return 1
+        [ -s "\$1/nodes.dmp" ] || return 1
+        for db in genomad_db genomad_mini_db genomad_integrase_db; do
+            mmseqs dbtype "\$1/\$db" 2>/dev/null | grep -qx "Profile" || return 1
+        done
+        return 0
+    }
+
+    if check_db "\$GENOMAD_DB"; then
+        echo "geNomad database already exists"
+    else
+        # Build into the task work directory and publish only once verified, so
+        # a partial download cannot leave behind a directory that the guard
+        # above would then have to tell apart from a finished one.
+        BUILD_DIR="\$PWD/genomad_download"
+        rm -rf "\$BUILD_DIR"
+        mkdir -p "\$BUILD_DIR"
+
+        # ~1.5 GB unpacked, plus the archive while it is being unpacked.
+        REQUIRED_KB=\$((6 * 1024 * 1024))
+        AVAILABLE_KB=\$(df -Pk "\$PWD" | awk 'NR == 2 { print \$4 }')
+        if [ "\$AVAILABLE_KB" -lt "\$REQUIRED_KB" ]; then
+            echo "Downloading the geNomad database needs ~6 GB in the work directory, but" >&2
+            echo "only \$((AVAILABLE_KB / 1024 / 1024)) GB is free on the filesystem holding \$PWD." >&2
+            echo "Point Nextflow at a larger work directory with -w." >&2
+            exit 1
+        fi
+
+        genomad download-database "\$BUILD_DIR"
+
+        check_db "\$BUILD_DIR/genomad_db" || {
+            echo "The geNomad database in \$BUILD_DIR/genomad_db is incomplete." >&2
+            exit 1
+        }
+
+        rm -rf "\$GENOMAD_DB"
+        mkdir -p "\$(dirname "\$GENOMAD_DB")"
+        mv "\$BUILD_DIR/genomad_db" "\$GENOMAD_DB"
+    fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/genomad
+    echo "DB_GENOMAD stub"
+    """
+}
+
+
+process DB_CHECKAMG {
+    label "viroprofiler_checkamg"
+    label "setup"
+
+    when:
+    params.mode == "setup"
+
+    script:
+    """
+    CHECKAMG_DB="${params.db}/checkamg"
+
+    # `checkamg download` unpacks the release into a versioned subdirectory of
+    # --db-dir, and `checkamg annotate --db-dir` accepts that parent. So the
+    # check has to look one level down, for the pressed HMM binaries the
+    # annotation step actually opens -- the human-readable `.hmm` files are
+    # optional and `--rm-hmm` deletes them.
+    check_db () {
+        for db in KEGG Pfam-A dbCAN_HMMdb_v14 METABOLIC_custom FOAM CAMPER; do
+            ls "\$1"/CheckAMG_annotate_db_*/\${db}*.h3i > /dev/null 2>&1 || return 1
+        done
+        return 0
+    }
+
+    if check_db "\$CHECKAMG_DB"; then
+        echo "CheckAMG database already exists"
+    else
+        # Only the annotate database is fetched. The de-novo database is a
+        # further ~76 GB and serves `checkamg de-novo`, which this pipeline does
+        # not run.
+        BUILD_DIR="\$PWD/checkamg_download"
+        rm -rf "\$BUILD_DIR"
+        mkdir -p "\$BUILD_DIR"
+
+        # ~41 GB unpacked, plus the ~13 GB archive while it is being unpacked.
+        REQUIRED_KB=\$((70 * 1024 * 1024))
+        AVAILABLE_KB=\$(df -Pk "\$PWD" | awk 'NR == 2 { print \$4 }')
+        if [ "\$AVAILABLE_KB" -lt "\$REQUIRED_KB" ]; then
+            echo "Downloading the CheckAMG annotate database needs ~70 GB in the work" >&2
+            echo "directory, but only \$((AVAILABLE_KB / 1024 / 1024)) GB is free on the" >&2
+            echo "filesystem holding \$PWD. Point Nextflow at a larger work directory with -w." >&2
+            exit 1
+        fi
+
+        PUBLISH_KB=\$(df -Pk "\$(dirname "\$CHECKAMG_DB")" | awk 'NR == 2 { print \$4 }')
+        if [ "\$PUBLISH_KB" -lt \$((45 * 1024 * 1024)) ]; then
+            echo "The finished CheckAMG database needs ~41 GB under ${params.db}, but only" >&2
+            echo "\$((PUBLISH_KB / 1024 / 1024)) GB is free there." >&2
+            exit 1
+        fi
+
+        export HOME=\$PWD
+        checkamg download -d "\$BUILD_DIR" --no-download-denovo-db
+
+        check_db "\$BUILD_DIR" || {
+            echo "The CheckAMG database in \$BUILD_DIR is incomplete: the pressed HMM" >&2
+            echo "binaries CheckAMG searches are missing." >&2
+            exit 1
+        }
+
+        rm -rf "\$CHECKAMG_DB"
+        mkdir -p "\$(dirname "\$CHECKAMG_DB")"
+        mv "\$BUILD_DIR" "\$CHECKAMG_DB"
+    fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/checkamg
+    echo "DB_CHECKAMG stub"
+    """
+}
+
+
 process DB_PHAMB {
     label "viroprofiler_base"
     label "setup"
