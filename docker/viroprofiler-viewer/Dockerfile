@@ -49,14 +49,23 @@ RUN R -e "remotes::install_github('deng-lab/vpfkit', ref = '${VPFKIT_REF}', upgr
     R -e "library(vpfkit)"
 
 # Smoke test in a stripped environment, because that is how `.command.sh` runs.
-# The three readers named here are the ones create_tse.r's arguments feed, and a
-# missing R dependency shows up as a load failure rather than at startup.
+# The functions named here are the ones create_tse.r calls, and a missing R
+# dependency shows up as a load failure rather than at startup.
+#
+# The check is against getNamespaceExports(), not exists(where = asNamespace()):
+# the latter finds internal objects too, so it passes for a function that the
+# package defines but does not export -- which is exactly what happens when
+# NAMESPACE is stale, and exactly the failure this test exists to catch. An
+# unexported function then dies at run time with "not an exported object from
+# 'namespace:vpfkit'", after the pipeline has done all its real work.
 RUN env -i HOME=/tmp LANG=C.UTF-8 PATH=/app/.pixi/envs/default/bin:/usr/bin:/bin \
     bash -c 'Rscript -e "suppressMessages(library(vpfkit)); \
                          suppressMessages(library(TreeSummarizedExperiment)); \
                          suppressMessages(library(argparser)); \
-                         stopifnot(all(sapply(c(\"create_vpftse\",\"create_vpftse_vir\",\"read_taxonomy2\",\"read_coverm\"), \
-                                              exists, where = asNamespace(\"vpfkit\")))); \
+                         need <- c(\"create_vpftse\", \"create_vpftse_vir\", \"annotate_viral_votes\", \
+                                   \"read_taxonomy2\", \"read_coverm\"); \
+                         miss <- setdiff(need, getNamespaceExports(\"vpfkit\")); \
+                         if (length(miss)) stop(\"vpfkit does not export: \", paste(miss, collapse = \", \")); \
                          cat(\"vpfkit\", as.character(packageVersion(\"vpfkit\")), \"OK\n\")" && \
              ps -p 1 -o comm='
 
