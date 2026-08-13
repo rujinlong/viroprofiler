@@ -17,7 +17,7 @@ dependencies:
     # iterator vcontact2 passes to sparse.coo_matrix ("mismatching number of index arrays
     # for shape; got 0, expected 2"). Hold all three at the release's own era.
     - numpy<1.24
-    - scipy<1.12
+    - scipy<1.11
     - pandas<2
     - click
     - wget
