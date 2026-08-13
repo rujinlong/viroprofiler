@@ -2,17 +2,17 @@
 """Merge per-contig taxonomy from several callers into one table.
 
 Which callers to merge is data, not code: every source is declared on the
-command line as a (name, priority, file) triple, so adding VITAP or geNomad to
-the pipeline means adding one `--source` line to `TAXONOMY_MERGE`, not editing
-the resolution logic. What each caller's file *looks like* is the one thing that
+command line as a (name, priority, file) triple, so adding geNomad to the
+pipeline means adding one `--source` line to `TAXONOMY_MERGE`, not editing the
+resolution logic. What each caller's file *looks like* is the one thing that
 cannot be data -- every tool writes its own layout -- so each name maps to a
 reader in `READERS` below, and a new caller needs a reader beside its entry
 there.
 
 Resolution is per rank: for a given contig and a given rank, the highest-priority
 source that assigned anything at that rank wins. A smaller priority number means
-higher priority, so `--source vcontact3 1 ...` is consulted before
-`--source mmseqs 2 ...`.
+higher priority, so `--source vitap 1 ...` is consulted before
+`--source vcontact3 3 ...`.
 
 A lineage may therefore be assembled from more than one caller -- family from
 vConTACT3, species from MMseqs2, say. That is the point, but taken literally it
@@ -39,6 +39,7 @@ rank vConTACT3 called novel is a positive claim that no known taxon fits, so a
 lower-priority caller naming one there is a disagreement.
 """
 
+import os
 import sys
 
 import click
@@ -46,7 +47,8 @@ import pandas as pd
 
 # Ranks written to the output table, in descending order. This is the union of
 # what the supported callers produce: vConTACT3 predicts realm..genus (it has no
-# species rank), MMseqs2's LCA reaches species but never subfamily.
+# species rank), VITAP realm..species (it has no subfamily), MMseqs2's LCA
+# reaches species but never subfamily.
 RANKS = ["Realm", "Kingdom", "Phylum", "Class", "Order", "Family", "Subfamily",
          "Genus", "Species"]
 
@@ -168,9 +170,115 @@ def read_mmseqs(path):
     return _clean(df.set_index("contig_id"))
 
 
+# The ranks VITAP packs into its single `lineage` column, in the order it writes
+# them: deepest first, no subfamily. `pad_lineage` in VITAP_assignment pads short
+# lineages on the *left*, so the string always holds exactly these eight fields
+# and Realm is always last.
+VITAP_RANKS = ["Species", "Genus", "Family", "Order", "Class", "Phylum",
+               "Kingdom", "Realm"]
+
+# VITAP writes the reference genomes it mixed into the query set to this file,
+# beside the lineage table in the same result directory.
+VITAP_REFERENCE_GENOMES = "ICTV_selected_genomes.fasta"
+
+
+def read_vitap(path):
+    """VITAP `best_determined_lineages.tsv`.
+
+    Four columns: `Genome_ID`, `lineage`, a score, and `Confidence_level`. Only
+    the first two are read. The score column is named `lineage_score` up to
+    VITAP 1.7 and `lineage_score/participation_index` from 1.10, which is why it
+    is selected by position in the header rather than by name -- and why nothing
+    here has to change to read a newer VITAP.
+
+    Every row is kept regardless of `Confidence_level`. `VITAP assignment`
+    already drops its low-confidence calls unless asked for them with
+    `--low_conf`, and it blanks the species and genus of everything it is not
+    confident about, so what reaches this table is the caller's own answer and
+    not something to second-guess here.
+
+    VITAP writes `[<Rank>]_<child>` where ICTV has no taxon at a rank above one
+    it did assign -- `[Order]_Peduoviridae` for a family that belongs to no
+    order. Those are kept, for the same reason vConTACT3's `novel_` labels are:
+    each is a positive claim that no known taxon fits, it is stable enough to
+    group by, and the bracketed prefix keeps it from being mistaken for an ICTV
+    name. Dropping them would also be actively harmful, because it would let a
+    lower-priority caller write the order that VITAP is saying does not exist.
+
+    Reference genomes share the table with the query contigs, exactly as in
+    vConTACT3, and again have to be dropped or RefSeq genomes are reported as
+    contigs of this dataset. VITAP marks nothing: `VITAP assignment` picks five
+    reference genomes with `seqkit sample`, concatenates them onto the query
+    FASTA and classifies the union, so the output carries no column that tells
+    the two apart. What it does write is the FASTA of exactly those genomes,
+    beside this table -- and since the classified set is precisely
+    `input FASTA + ICTV_selected_genomes.fasta`, subtracting that file's IDs
+    leaves the query contigs and nothing else. That file is therefore required:
+    without it there is no way to tell a contig from a reference, and guessing
+    from the shape of an accession is how RefSeq genomes end up in the output.
+    """
+    references = os.path.join(os.path.dirname(path), VITAP_REFERENCE_GENOMES)
+    if not os.path.isfile(references):
+        raise click.ClickException(
+            f"{references} is missing. VITAP mixes reference genomes into the "
+            f"genomes it classifies and writes them to that file; without it "
+            f"the query contigs cannot be told apart from the reference "
+            f"genomes in {path}, and refusing is better than reporting RefSeq "
+            f"genomes as contigs of this dataset")
+    with open(references) as handle:
+        reference_ids = {line[1:].split()[0] for line in handle
+                         if line.startswith(">") and line[1:].strip()}
+
+    df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False,
+                     na_values=[""])
+    for column in ("Genome_ID", "lineage"):
+        if column not in df.columns:
+            raise click.ClickException(
+                f"{path} has no '{column}' column; expected the four-column "
+                f"`best_determined_lineages.tsv` VITAP writes")
+    if df.empty:
+        return _clean(pd.DataFrame(index=pd.Index([], name="Genome_ID")))
+
+    genomes = df["Genome_ID"].astype("string").str.strip()
+    leaked = genomes.isin(reference_ids)
+    if leaked.any():
+        print(f"[merge_taxonomy] dropped {int(leaked.sum())} of "
+              f"{len(reference_ids)} VITAP reference genomes from {path}",
+              flush=True)
+    df = df[~leaked.fillna(False)]
+
+    text = df["lineage"].astype("string").fillna("")
+    # Every row must carry all eight fields. VITAP guarantees it -- `pad_lineage`
+    # in VITAP_assignment fills a short lineage up to eight before writing, and
+    # it pads on the *left*, so the last field is always Realm. Depending on that
+    # rather than repairing short rows here is deliberate: pandas' `str.split`
+    # pads on the right, so a row that really did arrive short would be read as
+    # Species-first and every value in it would land one or more ranks too deep
+    # -- a genus written into the Family column, silently. Checked against 25
+    # VITAP result files (445k rows), every one of which has exactly eight.
+    widths = text.str.count(";") + 1
+    wrong = widths != len(VITAP_RANKS)
+    if wrong.any():
+        raise click.ClickException(
+            f"{path} has {int(wrong.sum())} lineages that are not "
+            f"{len(VITAP_RANKS)} fields wide (first: "
+            f"{df.loc[wrong, 'Genome_ID'].iloc[0]}, "
+            f"{int(widths[wrong].iloc[0])} fields). Either a taxon name "
+            f"contains ';', which shifts every rank below it, or this is not a "
+            f"VITAP `best_determined_lineages.tsv`")
+
+    lineages = text.str.split(";", expand=True)
+    predictions = pd.DataFrame(index=pd.Index(genomes[~leaked.fillna(False)],
+                                              name="Genome_ID"))
+    for offset, rank in enumerate(VITAP_RANKS):
+        predictions[rank] = lineages[offset].to_numpy()
+    return _clean(predictions)
+
+
 # Source name -> reader. A reader takes a path and returns a frame indexed by
-# contig id whose columns are a subset of RANKS. Add VITAP and geNomad here.
+# contig id whose columns are a subset of RANKS. Add geNomad here.
 READERS = {
+    "vitap": read_vitap,
     "vcontact3": read_vcontact3,
     "mmseqs": read_mmseqs,
 }
@@ -182,8 +290,21 @@ def resolve(frames):
 
     `frames` is a list of (name, frame) already ordered by priority. Ranks are
     resolved top down, so by the time a rank is reached everything above it is
-    settled. Returns the merged table and the number of assignments dropped for
-    contradicting the lineage above them.
+    settled. Returns the merged table, the number of assignments dropped for
+    contradicting the lineage above them, and the number of contigs whose
+    lineage contains at least one unbridged transition.
+
+    An unbridged transition is the limit of what this check can promise. A
+    source is only ever compared against the ranks it has a value for, so where
+    it has none -- no column at all, or a blank -- it cannot contradict what is
+    already resolved, and is accepted by default. Both happen constantly here:
+    VITAP has no Subfamily column while vConTACT3 does, and VITAP assigns a
+    family without an order for about one contig in six, so a lineage can take
+    its family from one caller and its genus from another with nothing in
+    between to reconcile them. The result can be a chimaera that is worse than
+    either caller's own answer. Deciding which one is right needs a taxonomy to
+    look the names up in, which is not available at merge time, so these are
+    counted and reported rather than resolved.
     """
     contigs = pd.Index([], dtype="string", name="contig_id")
     for _, frame in frames:
@@ -191,6 +312,7 @@ def resolve(frames):
 
     merged = pd.DataFrame(index=contigs)
     suppressed = 0
+    unbridged = pd.Series(False, index=contigs)
     for depth, rank in enumerate(RANKS):
         values = pd.Series(pd.NA, index=contigs, dtype="string")
         origin = pd.Series(pd.NA, index=contigs, dtype="string")
@@ -217,12 +339,28 @@ def resolve(frames):
             origin = origin.mask(fill, name)
         merged[rank] = values
         merged[f"{rank}_source"] = origin
-    return merged, suppressed
+
+        # Flag the transitions the agreement check above could not make. A rank
+        # is unbridged when the source that filled it had nothing at some rank
+        # further up that a different source did fill: the two were never
+        # compared, and nothing here can say whether they belong together.
+        for name, frame in frames:
+            filled = (origin == name).fillna(False)
+            if not filled.any():
+                continue
+            for above in RANKS[:depth]:
+                theirs = (frame[above].reindex(contigs) if above in frame.columns
+                          else pd.Series(pd.NA, index=contigs, dtype="string"))
+                gap = (filled & merged[above].notna() & theirs.isna()
+                       & (merged[f"{above}_source"] != name))
+                unbridged |= gap.fillna(False)
+    return merged, suppressed, int(unbridged.sum())
 
 
-def summarise(merged, frames, suppressed):
-    """Print per-rank coverage, how often lineages mix sources, and how many
-    assignments were dropped for contradicting the lineage above them."""
+def summarise(merged, frames, suppressed, unbridged):
+    """Print per-rank coverage, how often lineages mix sources, how many
+    assignments were dropped for contradicting the lineage above them, and how
+    many lineages mix sources across a rank that was never reconciled."""
     total = len(merged)
     print(f"[merge_taxonomy] {total} contigs from {len(frames)} sources: "
           f"{', '.join(name for name, _ in frames)}", flush=True)
@@ -245,6 +383,9 @@ def summarise(merged, frames, suppressed):
           f"from more than one source", flush=True)
     print(f"[merge_taxonomy] {suppressed} assignments were dropped for "
           f"contradicting the lineage resolved above them", flush=True)
+    print(f"[merge_taxonomy] {unbridged}/{total} contigs took a rank from a "
+          f"source that had no value at some rank above it, so the two were "
+          f"never checked against each other", flush=True)
 
 
 @click.command()
@@ -287,8 +428,8 @@ def main(sources, fout):
               f"(priority {rank}): {path}", flush=True)
         frames.append((name, frame))
 
-    merged, suppressed = resolve(frames)
-    summarise(merged, frames, suppressed)
+    merged, suppressed, unbridged = resolve(frames)
+    summarise(merged, frames, suppressed, unbridged)
     merged.sort_index().to_csv(fout, sep="\t", index=True, na_rep="")
 
 

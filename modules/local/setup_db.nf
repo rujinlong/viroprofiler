@@ -430,6 +430,136 @@ process DB_VCONTACT3 {
 }
 
 
+process DB_VITAP {
+    label "viroprofiler_vitap"
+    label "setup"
+
+    when:
+    params.mode == "setup"
+
+    script:
+    """
+    VITAP_DB="${params.db}/vitap"
+
+    # What `VITAP assignment` actually opens in its database directory: one
+    # DIAMOND database, one VMR taxonomy map (*.csv), one VMR genome FASTA and
+    # the eight per-rank threshold tables. Everything else in the published
+    # archive is only read by `VITAP upd`.
+    #
+    # The DIAMOND database is checked by running a search, not by testing that
+    # the file exists, because existing is exactly what it does while being
+    # unusable: the published index was built with DIAMOND 0.9 and DIAMOND 2
+    # refuses it with "Database was built with an older version of Diamond and
+    # is incompatible" -- while still answering `diamond dbinfo` about it, so
+    # anything short of a search reports a healthy database. The build below
+    # therefore re-indexes, and this check is what proves the re-index took.
+    check_db () {
+        local db="\$1"
+        local dmnd faa
+        for rank in Species Genus Family Order Class Phylum Kingdom Realm; do
+            test -s "\$db/\${rank}_genome.threshold" || return 1
+        done
+        test "\$(ls "\$db"/*.csv 2>/dev/null | wc -l)" -eq 1 || return 1
+        test "\$(ls "\$db"/*.fasta 2>/dev/null | wc -l)" -eq 1 || return 1
+        dmnd=\$(ls "\$db"/*.dmnd 2>/dev/null | head -n 1)
+        faa=\$(ls "\$db"/*.faa 2>/dev/null | head -n 1)
+        test -s "\$dmnd" || return 1
+        test -s "\$faa" || return 1
+        # Query the database with its own first few proteins, which must align
+        # to themselves. An empty result means the index is unreadable or empty.
+        rm -rf db_probe && mkdir -p db_probe
+        seqkit head -n 3 "\$faa" > db_probe/probe.faa 2>/dev/null || return 1
+        diamond blastp -q db_probe/probe.faa -d "\$dmnd" -o db_probe/probe.align \\
+            -f 6 qseqid sseqid bitscore -k 1 --max-hsps 1 -e 1e-3 \\
+            --threads $task.cpus --quiet > /dev/null 2>&1 || return 1
+        test -s db_probe/probe.align || return 1
+        return 0
+    }
+
+    if check_db "\$VITAP_DB"; then
+        echo "VITAP database already exists"
+    else
+        # Build into the task work directory and publish only once verified, so
+        # an interrupted download cannot leave behind a directory that the check
+        # above would later have to tell apart from a finished one.
+        BUILD_DIR="\$PWD/vitap_db"
+        rm -rf "\$BUILD_DIR"
+        mkdir -p "\$BUILD_DIR"
+
+        # 622 MB archive, 2.3 GB unpacked, both present at once while unzipping.
+        REQUIRED_KB=\$((10 * 1024 * 1024))
+        AVAILABLE_KB=\$(df -Pk "\$PWD" | awk 'NR == 2 { print \$4 }')
+        if [ "\$AVAILABLE_KB" -lt "\$REQUIRED_KB" ]; then
+            echo "Building the VITAP database needs ~10 GB in the work directory, but only" >&2
+            echo "\$((AVAILABLE_KB / 1024 / 1024)) GB is free on the filesystem holding \$PWD." >&2
+            echo "Point Nextflow at a larger work directory with -w." >&2
+            exit 1
+        fi
+
+        # The hybrid VMR-MSL37 / RefSeq209 / IMG-VR v4 database published with
+        # VITAP, and the last one upstream released: from VITAP 1.10 the
+        # assignment searches UniRef90 as well and the pre-built databases were
+        # withdrawn, which is why docker/viroprofiler-vitap pins VITAP 1.7.1.
+        # The checksum is the one in VITAP's README, so a truncated download or
+        # a replaced file is caught here rather than at assignment time.
+        VITAP_DB_URL="https://ndownloader.figshare.com/files/49682337"
+        VITAP_DB_SHA256="13ac7e4790cfdad2a7f0d6c3ebc8a66badfab98138693bb86f7b2a71a91cb951"
+
+        wget -O "\$BUILD_DIR/db.zip" "\$VITAP_DB_URL"
+        echo "\$VITAP_DB_SHA256  \$BUILD_DIR/db.zip" | sha256sum -c - || {
+            echo "The VITAP database archive does not match the checksum published in" >&2
+            echo "VITAP's README; refusing to install it." >&2
+            exit 1
+        }
+
+        unzip -q "\$BUILD_DIR/db.zip" -d "\$BUILD_DIR/unpacked"
+        rm -f "\$BUILD_DIR/db.zip"
+
+        # The archive holds one directory of databases plus __MACOSX, the
+        # resource-fork directory the upstream author's Mac added when zipping.
+        UNPACKED=\$(find "\$BUILD_DIR/unpacked" -mindepth 1 -maxdepth 1 -type d \\
+                       -not -name '__MACOSX' | head -n 1)
+        test -d "\$UNPACKED" || {
+            echo "The VITAP database archive did not unpack to a directory." >&2
+            exit 1
+        }
+        mv "\$UNPACKED"/* "\$BUILD_DIR/"
+        rm -rf "\$BUILD_DIR/unpacked"
+
+        # 1 GB of self-alignments that only `VITAP upd` reads, and this image has
+        # no entrez-direct so it cannot run `upd` at all. The *.gff is kept even
+        # though 1.7 ignores it: VITAP 1.10 onwards resolves the name of the
+        # DIAMOND database from it.
+        rm -f "\$BUILD_DIR"/Self_BLAST_*.align
+
+        # Re-index. The published *.dmnd is in the DIAMOND 0.9 format that
+        # DIAMOND 2 will not search; the *.faa it was built from ships beside
+        # it, and re-indexing 726k proteins takes a couple of seconds.
+        FAA=\$(ls "\$BUILD_DIR"/*.faa | head -n 1)
+        DMND="\${FAA%.faa}"
+        rm -f "\$DMND.dmnd"
+        diamond makedb --in "\$FAA" -d "\$DMND" --threads $task.cpus
+
+        check_db "\$BUILD_DIR" || {
+            echo "The VITAP database in \$BUILD_DIR is unusable: a DIAMOND search against" >&2
+            echo "its own proteins returned nothing, or a required file is missing." >&2
+            exit 1
+        }
+
+        rm -rf "\$VITAP_DB"
+        mkdir -p "\$(dirname "\$VITAP_DB")"
+        mv "\$BUILD_DIR" "\$VITAP_DB"
+    fi
+    """
+
+    stub:
+    """
+    mkdir -p ${params.db}/vitap
+    echo "DB_VITAP stub"
+    """
+}
+
+
 process DB_VREFSEQ {
     label "viroprofiler_base"
     label "setup"

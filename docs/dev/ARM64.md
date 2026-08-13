@@ -10,13 +10,45 @@ nextflow run main.nf -profile apptainer,arm64_local --input samplesheet.csv --db
 ```
 
 `docker/build_arm64.sh` covers `base`, `qc`, `abundance`, `replicyc`, `vibrant`, `bracken`,
-`virsorter2`, `vcontact3`, `geneannot`, `binning` and `viewer`. Two images are missing from
-that list on purpose: they cannot be built for `linux-aarch64` at all.
+`virsorter2`, `vcontact3`, `vitap`, `geneannot`, `binning` and `viewer`. Two images are
+missing from that list on purpose: they cannot be built for `linux-aarch64` at all.
 
 `vcontact3` is buildable here only because it does not come from conda: `fastcluster` and
 `jenkspy` have no `linux-aarch64` conda build, so `pixi global install -c bioconda vcontact3`
 and every other conda route fail, while both packages compile from their PyPI sdists. See
 [I-32](KNOWN_ISSUES.md#i-32).
+
+`vitap` builds natively with no constraint to work around, which is worth recording because
+it is the exception among the taxonomy tools. VITAP itself is pure Python, and all three
+executables it calls have `linux-aarch64` builds in bioconda:
+
+```bash
+python3 -c "
+import json, urllib.request
+for p in ['diamond', 'seqkit', 'prodigal']:
+    d = json.load(urllib.request.urlopen('https://api.anaconda.org/package/bioconda/' + p))
+    subs = sorted({f['attrs'].get('subdir') for f in d['files'] if f['version'] == d['latest_version']})
+    print(p, d['latest_version'], subs)
+"
+# diamond 2.2.5 ['linux-64', 'linux-aarch64', 'osx-64', 'osx-arm64']
+# seqkit 2.13.0 ['linux-64', 'linux-aarch64', 'osx-64', 'osx-arm64']
+# prodigal 2.6.3 ['linux-64', 'linux-aarch64', 'osx-64', 'osx-arm64']
+```
+
+The bioconda `vitap` package is `noarch`, so the same holds for installing VITAP from
+bioconda rather than from source. What made a source install necessary is a version
+question, not an architecture one: see `docker/viroprofiler-vitap/Dockerfile` for why the
+image pins 1.7.1 rather than the current 1.12.
+
+The image was built and its smoke test run on an aarch64 host
+(`bash docker/build_arm64.sh vitap`, NVIDIA GB10, Apptainer 1.5.2):
+
+```
+#11 2.864 diamond version 2.1.16
+#11 2.868 Prodigal V2.6.3: February, 2016
+#11 2.889 seqkit v2.13.0
+OK    vitap -> /home/allen/singularity/viroprofiler/viroprofiler-vitap.sif
+```
 
 ## `viroprofiler-host` — iPHoP
 

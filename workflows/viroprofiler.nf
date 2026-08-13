@@ -63,7 +63,7 @@ include { VIRALHOST_IPHOP              } from '../modules/local/viral_host'
 include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
 include { CHECKV; VIRSORTER2; DVF; VIRCONTIGS_PRE; VIBRANT           } from '../modules/local/viral_detection'
 include { GENEPRED as GENEPRED4CTG; NRSEQS as NRPROT; NRSEQS as NRGENE } from '../modules/local/gene_library'
-include { TAXONOMY_VCONTACT3; TAXONOMY_MMSEQS; TAXONOMY_MERGE          } from '../modules/local/taxonomy'
+include { TAXONOMY_VITAP; TAXONOMY_VCONTACT3; TAXONOMY_MMSEQS; TAXONOMY_MERGE } from '../modules/local/taxonomy'
 include { RESULTS_TSE                  } from '../modules/local/base'
 
 /*
@@ -259,9 +259,23 @@ workflow VIROPROFILER {
             }
 
             // Taxonomy
+            if (params.use_vitap) {
+                TAXONOMY_VITAP(vContigs_and_vMAGs)
+                ch_taxa_vitap = TAXONOMY_VITAP.out.taxa_vitap_ch
+                ch_taxa_vitap_ref = TAXONOMY_VITAP.out.taxa_vitap_ref_ch
+                ch_versions = ch_versions.mix(TAXONOMY_VITAP.out.versions)
+            } else {
+                // An empty VITAP result, so that TAXONOMY_MERGE reads a source
+                // with no assignments rather than being given a different set of
+                // inputs. The two files together are what `read_vitap` expects:
+                // the lineage table, and the reference genomes to subtract from
+                // it.
+                ch_taxa_vitap = Channel.fromPath("${projectDir}/assets/no_vitap/best_determined_lineages.tsv").first()
+                ch_taxa_vitap_ref = Channel.fromPath("${projectDir}/assets/no_vitap/ICTV_selected_genomes.fasta").first()
+            }
             TAXONOMY_VCONTACT3(vContigs_and_vMAGs)
             TAXONOMY_MMSEQS(vContigs_and_vMAGs)
-            TAXONOMY_MERGE(TAXONOMY_VCONTACT3.out.taxa_vc_ch, TAXONOMY_MMSEQS.out.taxa_mmseqs_ch)
+            TAXONOMY_MERGE(ch_taxa_vitap, ch_taxa_vitap_ref, TAXONOMY_VCONTACT3.out.taxa_vc_ch, TAXONOMY_MMSEQS.out.taxa_mmseqs_ch)
 
             // for testing only
             // BRACKEN_DB(TAXONOMY_MMSEQS.out.taxa_mmseqs_ch, vContigs_and_vMAGs)

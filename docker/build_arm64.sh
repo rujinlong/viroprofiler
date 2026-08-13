@@ -18,7 +18,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAG="${TAG:-v0.3}"
 SIF_DIR="${SIF_DIR:-$HOME/singularity/viroprofiler}"
 
-ALL_IMAGES=(base qc abundance replicyc vibrant bracken virsorter2 vcontact3 geneannot binning viewer)
+ALL_IMAGES=(base qc abundance replicyc vibrant bracken virsorter2 vcontact3 vitap geneannot binning viewer)
 IMAGES=("${@:-}")
 [[ -z "${IMAGES[*]}" ]] && IMAGES=("${ALL_IMAGES[@]}")
 

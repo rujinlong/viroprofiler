@@ -273,6 +273,11 @@
                     "type": "integer",
                     "description": "vConTACT3 reference database version. Each vConTACT3 release accepts only one version; 3.2.4 requires 232 and rejects 223, 228 and 230.",
                     "default": 232
+                },
+                "use_vitap": {
+                    "type": "boolean",
+                    "description": "Use VITAP for taxonomy assignment. VITAP is the highest-priority source in the merged taxonomy: it is the only caller here that reaches species rank. Needs the 1.3 GB database DB_VITAP installs.",
+                    "default": true
                 }
             }
         },
