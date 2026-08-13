@@ -7,16 +7,29 @@ Companion documents: [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md) (every defect found,
 
 ## Where the pipeline stands
 
-The pipeline runs end to end and produces a TreeSummarizedExperiment. On a two-sample test
-(HT02, UC20) from a cold start with no resume cache, on aarch64 with the pixi-built images
-and `--use_dram false`: 28 processes, 0 failures, and a viral TSE of 18 contigs × 2 samples
-with `counts`, `tpm`, `tmm` and `covfrac` assays and 37 `rowData` columns. Sixteen of those
-contigs carry a merged lineage, assembled from VITAP and vConTACT3.
+The pipeline runs end to end and produces a TreeSummarizedExperiment. The reference run is
+the sixteen-sample test set (`assets/samplesheet_testfull.csv`, seven `HT` and nine `UC`),
+on aarch64 with the pixi-built images and every optional module on except iPHoP, which has
+no aarch64 build:
 
-That is a low bar in absolute terms — two samples, 22 contigs in the dereplicated library —
-but it is the shape every change here is measured against. Reproduce it with the command under
-[Running it on this machine](#running-it-on-this-machine); anything that changes those numbers
-is a result change and needs explaining.
+| | |
+|---|---|
+| Contigs | 161 in the dereplicated library, 100 called viral |
+| Samples | 16, in two groups |
+| Assays | `counts`, `tpm`, `trimmed_mean`, `covfrac` |
+| `rowData` | 55 columns |
+| `colData` | `sample_name`, `group`, `n_reads_total`, `n_reads_mapped`, `mapping_rate` |
+| Lineages | 92 contigs, across 34 families |
+| Gene annotations | 3511 in `metadata()`, 1954 from CheckAMG and 1557 from DRAM-v |
+| Wall clock | about 40 minutes on one spark node, 16 cores |
+
+Anything that changes those numbers is a result change and needs explaining. Reproduce with
+the command under [Running it on this machine](#running-it-on-this-machine).
+
+A two-sample subset (HT02, UC20) is kept as a fast check, and is what most of the
+verification below was done on: 22 contigs, 18 of them viral. It is enough to exercise every
+process and nothing that needs more than one sample per group — no ordination, no PERMANOVA,
+no group comparison of any kind. Use the sixteen-sample set for anything statistical.
 
 Everything is committed on `dev_ru` and **not pushed**, so that it can be squash-merged into
 `main`.
@@ -81,25 +94,42 @@ The published `denglab/*` images are amd64-only, so this aarch64 host uses local
 through the `arm64_local` profile:
 
 ```bash
+export NXF_SYNTAX_PARSER=v1
+
 nextflow run main.nf \
   -profile apptainer,arm64_local -resume \
   --sif_dir ~/singularity/viroprofiler-pixi \
   --input samplesheet.csv \
+  --sample_metadata metadata.csv \
   --db /mnt/scratch/db/viroprofiler \
   --container_binds /home/allen/data2/db,/mnt/nas26/db,/home/allen/bioinfo/models \
   --use_dram false \
   --max_cpus 8 --max_memory 32.GB
 ```
 
-Two things about that command are not obvious:
+Four things about that command are not obvious:
 
+- **`NXF_SYNTAX_PARSER=v1` is mandatory, not tuning.** Nextflow 25.x made a restricted config
+  language the default, and this pipeline is not written in it: the run dies at startup with
+  a parse error pointing at a config line rather than at the cause. It is easy to miss
+  because an interactive shell may already export it — which is why this went unnoticed until
+  a `sbatch --export=NIL` job stripped it. [I-45](dev/KNOWN_ISSUES.md#i-45) lists what has to
+  move and why config and scripts have to migrate together.
 - **`--container_binds` is required here, not optional.** Nextflow invokes Apptainer with
   `--no-home`, so nothing outside the work directory is visible unless it is bound. Several
   entries under `--db` are symlinks into `~/data2/db` and `/mnt/nas26/db`, and the geNomad
   database is a *two-hop* symlink whose second hop lands in `~/bioinfo/models` — that third
   path is why the first real geNomad run failed.
+- **`--sample_metadata` is what makes the output analysable.** Without it `colData` holds one
+  column, the sample name, and no group-wise comparison is possible on the object the
+  pipeline exists to produce. It cannot ride in the samplesheet: `INPUT_CHECK` rejects
+  anything that is not exactly three columns.
 - **`--use_dram false` is a local convenience, not a recommendation.** The DRAM database is
   built and working; DRAM is simply the slowest step and is usually not what is being tested.
+
+On a Slurm submission add `--sif_dir` pointing somewhere both nodes can see. `~/singularity`
+is node-local: it *exists* on spark2 with a different, older set of images, so a job that
+points there does not fail with "no such path" — it silently uses the wrong containers.
 
 Databases live at `/mnt/scratch/db/viroprofiler`:
 
