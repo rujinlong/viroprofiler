@@ -13,16 +13,15 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "default": "test",
+                    "default": "all",
                     "enum": [
                         "setup",
-                        "test",
                         "fastqc",
                         "fastp",
                         "contiglib",
                         "all"
                     ],
-                    "description": "Pipeline running mode"
+                    "description": "Last pipeline stage to run. `setup` builds the databases and processes no reads; the others are cumulative, so `contiglib` runs everything `fastp` runs and then assembles, cleans and dereplicates. `fastqc` and `fastp` are incompatible with `--reads_type clean`, which skips both."
                 },
                 "input": {
                     "type": "string",
@@ -273,15 +272,6 @@
             "description": "Parameters of softwares used in taxonomy assignment module",
             "default": "",
             "properties": {
-                "taxa_db_source": {
-                    "type": "string",
-                    "description": "Which taxonomy db should be used",
-                    "default": "NCBI",
-                    "enum": [
-                        "NCBI",
-                        "ICTV"
-                    ]
-                },
                 "contig_minlen_vcontact3": {
                     "type": "integer",
                     "description": "Minimum contig length for vConTACT3 input",

@@ -63,7 +63,7 @@ include { VIRALHOST_IPHOP              } from '../modules/local/viral_host'
 include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
 include { CHECKV; VIRSORTER2; GENOMAD; VIRCONTIGS_PRE; VIBRANT       } from '../modules/local/viral_detection'
 include { GENEPRED as GENEPRED4CTG; NRSEQS as NRPROT; NRSEQS as NRGENE } from '../modules/local/gene_library'
-include { TAXONOMY_VITAP; TAXONOMY_VCONTACT3; TAXONOMY_MMSEQS; TAXONOMY_MERGE } from '../modules/local/taxonomy'
+include { TAXONOMY_VITAP; TAXONOMY_VCONTACT3; TAXONOMY_MERGE } from '../modules/local/taxonomy'
 include { RESULTS_TSE                  } from '../modules/local/base'
 
 /*
@@ -79,6 +79,11 @@ workflow VIROPROFILER {
     if (params.mode == "setup") {
         SETUP()
     } else {
+        // `--mode` names the last stage to run, and the stages are cumulative: every
+        // stage below the requested one runs too. The numbering, and the validation
+        // that rejects an unknown mode, both live in WorkflowViroprofiler.MODE_STAGE.
+        def stage = WorkflowViroprofiler.stageOf(params)
+
         ch_multiqc_files = Channel.empty()
 
         // Check mandatory parameters
@@ -90,84 +95,103 @@ workflow VIROPROFILER {
         //
         INPUT_CHECK ( ch_input )
 
-        // if input_type is "clean", set ch_clean_reads to input_reads, otherwise set to FASTP.out.reads
-        if (params.reads_type == "clean") {
-            ch_clean_reads = INPUT_CHECK.out.reads
-        } else {
-            // MODULE: Run FastQC
+        //
+        // STAGE fastqc: report on the reads as submitted.
+        //
+        // Skipped entirely for `--reads_type clean`, which declares the reads already
+        // trimmed. `--mode fastqc` is rejected in that combination rather than run empty.
+        //
+        if (params.reads_type != "clean") {
             FASTQC (
                 INPUT_CHECK.out.reads
             )
             ch_versions = ch_versions.mix(FASTQC.out.versions.first())
-
-            // MODULE: Run fastp
-            FASTP (
-                INPUT_CHECK.out.reads, false, false
-            )
-            ch_versions = ch_versions.mix(FASTP.out.versions.first())
-
-            // Decontamination
-            if (params.use_decontam) {
-                def contamref = params.contamref_idx ?: "${params.db}/contamination_refs/hg19/ref"
-                if (!file(contamref).exists()) {
-                    exit 1, "Decontamination is enabled but no reference index was found at '${contamref}'.\n" +
-                            "Build a BBMap index there, point --contamref_idx at an existing one, or pass --use_decontam false."
-                }
-                ch_contamref = Channel.fromPath(contamref, checkIfExists: true).first()
-                DECONTAM (FASTP.out.reads, ch_contamref)
-                ch_clean_reads = DECONTAM.out.reads
-                ch_versions = ch_versions.mix(DECONTAM.out.versions.first())
-            } else {
-                ch_clean_reads = FASTP.out.reads
-            }
-
             ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]}.ifEmpty([]))
-            ch_multiqc_files = ch_multiqc_files.mix(FASTP.out.json.collect{it[1]}.ifEmpty([]))
-
-            // ch_clean_reads = FASTP.out.reads
         }
 
-
-
-        // if input_contigs is specified, set ch_cclib to input_contigs, otherwise set to CONTIGLIB.out.cclib_long_ch
-        if (params.input_contigs) {
-            ch_cclib = Channel.fromPath("${params.input_contigs}", checkIfExists: true).first()
-        } else {
-            // Run spades
-            SPADES (
-                ch_clean_reads.map { meta, fastq -> [ meta, fastq, [], [] ] },
-                []
-            )
-
-            // Use contigs or scaffolds
-            if ( params.assemblies == "contigs") {
-                assemblies = SPADES.out.contigs
+        //
+        // STAGE fastp: trimming, and optional removal of host reads.
+        //
+        if (stage >= WorkflowViroprofiler.MODE_STAGE['fastp']) {
+            // if input_type is "clean", set ch_clean_reads to input_reads, otherwise set to FASTP.out.reads
+            if (params.reads_type == "clean") {
+                ch_clean_reads = INPUT_CHECK.out.reads
             } else {
-                assemblies = SPADES.out.scaffolds
+                // MODULE: Run fastp
+                FASTP (
+                    INPUT_CHECK.out.reads, false, false
+                )
+                ch_versions = ch_versions.mix(FASTP.out.versions.first())
+                ch_multiqc_files = ch_multiqc_files.mix(FASTP.out.json.collect{it[1]}.ifEmpty([]))
+
+                // Decontamination
+                if (params.use_decontam) {
+                    def contamref = params.contamref_idx ?: "${params.db}/contamination_refs/hg19/ref"
+                    if (!file(contamref).exists()) {
+                        exit 1, "Decontamination is enabled but no reference index was found at '${contamref}'.\n" +
+                                "Build a BBMap index there, point --contamref_idx at an existing one, or pass --use_decontam false."
+                    }
+                    ch_contamref = Channel.fromPath(contamref, checkIfExists: true).first()
+                    DECONTAM (FASTP.out.reads, ch_contamref)
+                    ch_clean_reads = DECONTAM.out.reads
+                    ch_versions = ch_versions.mix(DECONTAM.out.versions.first())
+                } else {
+                    ch_clean_reads = FASTP.out.reads
+                }
+            }
+        }
+
+        //
+        // STAGE contiglib: assemble, clean with CheckV, and dereplicate.
+        //
+        // The dereplicated library is the read-mapping reference for abundance, which is
+        // why it covers all contigs and not only the viral ones, and why viral
+        // identification happens after this stage rather than before it.
+        //
+        if (stage >= WorkflowViroprofiler.MODE_STAGE['contiglib']) {
+            // if input_contigs is specified, set ch_cclib to input_contigs, otherwise set to CONTIGLIB.out.cclib_long_ch
+            if (params.input_contigs) {
+                ch_cclib = Channel.fromPath("${params.input_contigs}", checkIfExists: true).first()
+            } else {
+                // Run spades
+                SPADES (
+                    ch_clean_reads.map { meta, fastq -> [ meta, fastq, [], [] ] },
+                    []
+                )
+
+                // Use contigs or scaffolds
+                if ( params.assemblies == "contigs") {
+                    assemblies = SPADES.out.contigs
+                } else {
+                    assemblies = SPADES.out.scaffolds
+                }
+
+                // Create contig library
+                CONTIGLIB(
+                    assemblies.map { meta, fasta -> [fasta] }.collect()
+                )
+                ch_cclib = CONTIGLIB.out.cclib_long_ch
+
+                // Extract versions
+                ch_versions = ch_versions.mix(SPADES.out.versions.first())
+                ch_versions = ch_versions.mix(CONTIGLIB.out.versions)
             }
 
-            // Create contig library
-            CONTIGLIB(
-                assemblies.map { meta, fasta -> [fasta] }.collect()
-            )
-            ch_cclib = CONTIGLIB.out.cclib_long_ch
+            // MODULE: CheckV
+            CHECKV(ch_cclib)
+            clean_cclib_long = CHECKV.out.checkv_qc_ch
+            ch_versions = ch_versions.mix(CHECKV.out.versions)
 
-            // Extract versions
-            ch_versions = ch_versions.mix(SPADES.out.versions.first())
-            ch_versions = ch_versions.mix(CONTIGLIB.out.versions)
+            // MODULE: contig clustering
+            CONTIGLIB_CLUSTER (clean_cclib_long)
+            ch_nrclib = CONTIGLIB_CLUSTER.out.nrclib_ch
+            ch_versions = ch_versions.mix(CONTIGLIB_CLUSTER.out.versions)
         }
 
-        // MODULE: CheckV
-        CHECKV(ch_cclib)
-        clean_cclib_long = CHECKV.out.checkv_qc_ch
-        ch_versions = ch_versions.mix(CHECKV.out.versions)
-
-        // MODULE: contig clustering
-        CONTIGLIB_CLUSTER (clean_cclib_long)
-        ch_nrclib = CONTIGLIB_CLUSTER.out.nrclib_ch
-        ch_versions = ch_versions.mix(CONTIGLIB_CLUSTER.out.versions)
-
-        if (params.mode == "all") {
+        //
+        // STAGE all: everything downstream of the dereplicated contig library.
+        //
+        if (stage >= WorkflowViroprofiler.MODE_STAGE['all']) {
             // Gene library
             GENEPRED4CTG (clean_cclib_long, "ccclib_long")
             ch_prot_all = GENEPRED4CTG.out.prot_ch
@@ -246,13 +270,28 @@ workflow VIROPROFILER {
             // Binning (optional)
             if ( params.binning ) {
                 if ( params.binning == "phamb" ) {
-                    // PHAMB's random forest was trained on DeepVirFinder's per-contig
-                    // score table and `run_RF.py` reads it directly. geNomad's scores are
-                    // not a drop-in substitute -- different model, different calibration --
-                    // and quietly feeding the forest something it was not trained on would
-                    // change which bins are called viral without saying so. Fail instead.
-                    exit 1, "--binning phamb needs DeepVirFinder's score table, which this pipeline no longer produces.\n" +
-                            "Use --binning vrhyme, or pin an older ViroProfiler release if PHAMB is required."
+                    // PHAMB's features are counts of VOG and miComplete HMM hits, and those
+                    // two HMM sets are installed by `--mode setup` only when
+                    // `--use_phamb true` was passed. Check here rather than letting
+                    // MICOMPLETEDB fail on a missing file after VAMB has already run.
+                    // Not under `-stub`, where no process reads a database at all.
+                    def phamb_hmms = ["${params.db}/vogdb/AllVOG.hmm",
+                                      "${params.db}/micomplete/Bact105.hmm"]
+                    def missing_hmms = workflow.stubRun ? [] : phamb_hmms.findAll { !file(it).exists() }
+                    if (missing_hmms) {
+                        exit 1, "--binning phamb needs HMM sets that are not present:\n" +
+                                missing_hmms.collect { "  ${it}" }.join("\n") + "\n" +
+                                "Build them with '--mode setup --use_phamb true', or use --binning vrhyme."
+                    }
+
+                    // PHAMB's random forest reads a per-contig virus score in
+                    // DeepVirFinder's format. This pipeline no longer runs DeepVirFinder,
+                    // so PHAMB_DVF_TABLE supplies geNomad's scores in that layout: the same
+                    // range and the same slot, but not the distribution the forest was
+                    // fitted on, so its bin calls are approximate. bin/genomad_to_dvf.py
+                    // states the limitation in full.
+                    vMAG_PHAMB(ch_putative_vContigs, ch_genomad_score, ch_bams)
+                    vContigs_and_vMAGs = vMAG_PHAMB.out
                 } else if ( params.binning == "vrhyme" ) {
                     vMAG_VRHYME(ch_putative_vContigs, ch_gene_all, ch_prot_all, ch_bams)
                     vContigs_and_vMAGs = vMAG_VRHYME.out
@@ -292,14 +331,7 @@ workflow VIROPROFILER {
                 ch_taxa_vitap_ref = Channel.fromPath("${projectDir}/assets/no_vitap/ICTV_selected_genomes.fasta").first()
             }
             TAXONOMY_VCONTACT3(vContigs_and_vMAGs)
-            TAXONOMY_MMSEQS(vContigs_and_vMAGs)
-            TAXONOMY_MERGE(ch_taxa_vitap, ch_taxa_vitap_ref, TAXONOMY_VCONTACT3.out.taxa_vc_ch, TAXONOMY_MMSEQS.out.taxa_mmseqs_ch)
-
-            // for testing only
-            // BRACKEN_DB(TAXONOMY_MMSEQS.out.taxa_mmseqs_ch, vContigs_and_vMAGs)
-            // BRACKEN(ch_clean_reads, BRACKEN_DB.out.ch_brackenDB_for_bracken)
-            // BRACKEN_COMBINEBRACKENOUTPUTS(BRACKEN.out.ch_reports.collect())
-
+            TAXONOMY_MERGE(ch_taxa_vitap, ch_taxa_vitap_ref, TAXONOMY_VCONTACT3.out.taxa_vc_ch)
 
             // Using kraken2 and bracken
             if ( params.use_kraken2 ) {
@@ -315,7 +347,6 @@ workflow VIROPROFILER {
 
             ch_versions = ch_versions.mix(VIRSORTER2.out.versions)
             ch_versions = ch_versions.mix(TAXONOMY_VCONTACT3.out.versions)
-            ch_versions = ch_versions.mix(TAXONOMY_MMSEQS.out.versions)
             ch_versions = ch_versions.mix(TAXONOMY_MERGE.out.versions)
             // ch_versions = ch_versions.mix(BRACKEN.out.versions)
 
@@ -331,30 +362,31 @@ workflow VIROPROFILER {
             }
 
             // TreeSummarizedExperiment
-            RESULTS_TSE (ABUNDANCE.out.ab_count_ch, ABUNDANCE.out.ab_tpm_ch, ABUNDANCE.out.ab_trmean_ch, ABUNDANCE.out.ab_covfrac_ch, TAXONOMY_MERGE.out.taxa_mmseqs_ch, CHECKV.out.checkv2vContigs_ch, VIRSORTER2.out.vs2_score_ch, ch_vibrant_quality, ch_dvf2vcontigs, ch_genomad_score, ch_replicyc)
-
-            CUSTOM_DUMPSOFTWAREVERSIONS (
-                ch_versions.unique().collectFile(name: 'collated_versions.yml')
-            )
-
-            //
-            // MODULE: MultiQC
-            //
-            workflow_summary    = WorkflowViroprofiler.paramsSummaryMultiqc(workflow, summary_params)
-            ch_workflow_summary = Channel.value(workflow_summary)
-
-            ch_multiqc_files = ch_multiqc_files.mix(Channel.from(ch_multiqc_config))
-            ch_multiqc_files = ch_multiqc_files.mix(ch_multiqc_custom_config.collect().ifEmpty([]))
-            ch_multiqc_files = ch_multiqc_files.mix(ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
-            ch_multiqc_files = ch_multiqc_files.mix(CUSTOM_DUMPSOFTWAREVERSIONS.out.mqc_yml.collect())
-
-            MULTIQC (
-                ch_multiqc_files.collect()
-            )
-            multiqc_report = MULTIQC.out.report.toList()
-            ch_versions    = ch_versions.mix(MULTIQC.out.versions)
+            RESULTS_TSE (ABUNDANCE.out.ab_count_ch, ABUNDANCE.out.ab_tpm_ch, ABUNDANCE.out.ab_trmean_ch, ABUNDANCE.out.ab_covfrac_ch, TAXONOMY_MERGE.out.taxa_tse_ch, CHECKV.out.checkv2vContigs_ch, VIRSORTER2.out.vs2_score_ch, ch_vibrant_quality, ch_dvf2vcontigs, ch_genomad_score, ch_replicyc)
         }
 
+        // Reporting runs for every mode, so that a run stopped early still says what it
+        // did and with which tool versions.
+        CUSTOM_DUMPSOFTWAREVERSIONS (
+            ch_versions.unique().collectFile(name: 'collated_versions.yml')
+        )
+
+        //
+        // MODULE: MultiQC
+        //
+        workflow_summary    = WorkflowViroprofiler.paramsSummaryMultiqc(workflow, summary_params)
+        ch_workflow_summary = Channel.value(workflow_summary)
+
+        ch_multiqc_files = ch_multiqc_files.mix(Channel.from(ch_multiqc_config))
+        ch_multiqc_files = ch_multiqc_files.mix(ch_multiqc_custom_config.collect().ifEmpty([]))
+        ch_multiqc_files = ch_multiqc_files.mix(ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
+        ch_multiqc_files = ch_multiqc_files.mix(CUSTOM_DUMPSOFTWAREVERSIONS.out.mqc_yml.collect())
+
+        MULTIQC (
+            ch_multiqc_files.collect()
+        )
+        multiqc_report = MULTIQC.out.report.toList()
+        ch_versions    = ch_versions.mix(MULTIQC.out.versions)
     }
 }
 

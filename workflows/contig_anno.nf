@@ -63,7 +63,7 @@ include { VIRALHOST_IPHOP              } from '../modules/local/viral_host'
 include { BACPHLIP; REPLIDEC           } from '../modules/local/replicyc'
 include { CHECKV; VIRSORTER2; GENOMAD; VIRCONTIGS_PRE; VIBRANT       } from '../modules/local/viral_detection'
 include { GENEPRED as GENEPRED4CTG; NRSEQS as NRPROT; NRSEQS as NRGENE } from '../modules/local/gene_library'
-include { TAXONOMY_VITAP; TAXONOMY_VCONTACT3; TAXONOMY_MMSEQS; TAXONOMY_MERGE } from '../modules/local/taxonomy'
+include { TAXONOMY_VITAP; TAXONOMY_VCONTACT3; TAXONOMY_MERGE } from '../modules/local/taxonomy'
 include { RESULTS_TSE                  } from '../modules/local/base'
 
 /*
@@ -142,8 +142,7 @@ workflow CONTIGANNO {
         ch_taxa_vitap_ref = Channel.fromPath("${projectDir}/assets/no_vitap/ICTV_selected_genomes.fasta").first()
     }
     TAXONOMY_VCONTACT3(ch_nrclib)
-    TAXONOMY_MMSEQS(ch_nrclib)
-    TAXONOMY_MERGE(ch_taxa_vitap, ch_taxa_vitap_ref, TAXONOMY_VCONTACT3.out.taxa_vc_ch, TAXONOMY_MMSEQS.out.taxa_mmseqs_ch)
+    TAXONOMY_MERGE(ch_taxa_vitap, ch_taxa_vitap_ref, TAXONOMY_VCONTACT3.out.taxa_vc_ch)
 
     // Viral host
     if ( params.use_iphop ) {

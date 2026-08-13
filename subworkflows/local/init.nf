@@ -1,4 +1,4 @@
-include { DB_CHECKV; DB_PHAMB; DB_VIRSORTER2; DB_DRAM; DB_VIBRANT; DB_IPHOP; DB_EGGNOG; DB_VOGDB; DB_MICOMPLETEDB; DB_VREFSEQ; DB_VCONTACT3; DB_VITAP; DB_KRAKEN2; DB_GENOMAD; DB_CHECKAMG } from "../../modules/local/setup_db"
+include { DB_CHECKV; DB_VIRSORTER2; DB_DRAM; DB_VIBRANT; DB_IPHOP; DB_EGGNOG; DB_VOGDB; DB_MICOMPLETEDB; DB_VCONTACT3; DB_VITAP; DB_KRAKEN2; DB_GENOMAD; DB_CHECKAMG } from "../../modules/local/setup_db"
 
 workflow SETUP {
     main:
@@ -25,7 +25,6 @@ workflow SETUP {
     }
 
     // taxonomy
-    DB_VREFSEQ()
     DB_VCONTACT3()
     if (params.use_vitap) {
         DB_VITAP()
@@ -34,9 +33,9 @@ workflow SETUP {
         DB_KRAKEN2()
     }
 
-    // binning
+    // binning. PHAMB's random forest ships inside the phamb package, so only the two
+    // HMM sets its features are computed from have to be downloaded.
     if (params.use_phamb) {
-        DB_PHAMB()
         DB_VOGDB()
         DB_MICOMPLETEDB()
     }

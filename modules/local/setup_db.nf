@@ -188,32 +188,6 @@ process DB_CHECKAMG {
 }
 
 
-process DB_PHAMB {
-    label "viroprofiler_base"
-    label "setup"
-
-    when:
-    params.mode == "setup"
-
-    script:
-    """
-    if [ ! -d ${params.db}/phamb ]; then
-        mkdir -p $params.db/phamb
-        # wget -O $params.db/phamb/RF_model.sav "https://github.com/RasmussenLab/phamb/raw/master/workflows/mag_annotation/dbs/RF_model.sav"
-        wget -O $params.db/phamb/RF_model.sav "https://raw.githubusercontent.com/RasmussenLab/phamb/master/phamb/dbs/RF_model.sav"
-    else
-        echo "PHAMB database already exists"
-    fi
-    """
-
-    stub:
-    """
-    mkdir -p ${params.db}/phamb
-    echo "DB_PHAMB stub"
-    """
-}
-
-
 process DB_VIRSORTER2 {
     label "viroprofiler_virsorter2"
     label "setup"
@@ -702,69 +676,6 @@ process DB_VITAP {
     """
     mkdir -p ${params.db}/vitap
     echo "DB_VITAP stub"
-    """
-}
-
-
-process DB_VREFSEQ {
-    label "viroprofiler_base"
-    label "setup"
-
-    when:
-    params.mode == "setup"
-
-    script:
-    """
-    # Download NCBI taxonomy
-    if [ ! -d ${params.db}/taxonomy/taxdump ]; then
-        mkdir dl_taxdump
-        cd dl_taxdump
-        wget -O taxdump.zip https://ftp.ncbi.nih.gov/pub/taxonomy/taxdump_archive/taxdmp_2022-08-01.zip
-        unzip taxdump.zip
-        # wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz
-        #tar -zxvf taxdump.tar.gz
-        mkdir -p ${params.db}/taxonomy/taxdump
-        mv names.dmp nodes.dmp delnodes.dmp merged.dmp ${params.db}/taxonomy/taxdump
-        cd ..
-        rm -rf dl_taxonkit
-    else
-        echo "NCBI taxonomy already exists"
-    fi
-
-    if [ ! -d ${params.db}/taxonomy/mmseqs_vrefseq ]; then
-        # Build in the task work directory, not in place. mmseqs writes its index with
-        # access patterns that fail on NFS ("Can not open result file ..."), and building
-        # elsewhere also means an interrupted run cannot leave a half-built database behind
-        # for the directory-existence guard above to mistake for a complete one.
-        wget -O mmseqs_vrefseq.tar.gz "https://zenodo.org/record/7044674/files/mmseqs_vrefseq.tar.gz"
-        tar -zxf mmseqs_vrefseq.tar.gz
-        rm mmseqs_vrefseq.tar.gz
-        # The published archive stores its members with mode 040, so the owner cannot read
-        # them and `mmseqs createdb` fails with "Permission denied". Use `find -exec`:
-        # `chmod -R` is silently a no-op on filesystems that apply a default ACL.
-        find mmseqs_vrefseq -type d -exec chmod u+rwx {} +
-        find mmseqs_vrefseq -type f -exec chmod u+rw {} +
-        test -r mmseqs_vrefseq/refseq_viral.faa \\
-            || { echo "refseq_viral.faa is still unreadable after unpacking" >&2; exit 1; }
-
-        cd mmseqs_vrefseq
-        mmseqs createdb refseq_viral.faa refseq_viral
-        mmseqs createtaxdb refseq_viral tmp --ncbi-tax-dump ${params.db}/taxonomy/taxdump --tax-mapping-file virus.accession2taxid --threads $task.cpus
-        mmseqs createindex refseq_viral tmp --threads $task.cpus
-        rm -rf tmp
-        cd ..
-
-        mv mmseqs_vrefseq ${params.db}/taxonomy/
-    else
-        echo "vRefSeq database already exists"
-    fi
-    """
-
-    stub:
-    """
-    mkdir -p ${params.db}/taxonomy/taxdump
-    mkdir -p ${params.db}/taxonomy/mmseqs_vrefseq
-    echo "DB_VREFSEQ stub"
     """
 }
 

@@ -15,7 +15,7 @@ higher priority, so `--source vitap 1 ...` is consulted before
 `--source vcontact3 3 ...`.
 
 A lineage may therefore be assembled from more than one caller -- family from
-vConTACT3, species from MMseqs2, say. That is the point, but taken literally it
+vConTACT3, species from VITAP, say. That is the point, but taken literally it
 produces contradictory lineages: give vConTACT3 priority and a contig can come
 out as family Casjensviridae with the species Escherichia virus T4, which is a
 Straboviridae. So a caller is only consulted at a rank if it does not already
@@ -47,15 +47,16 @@ import pandas as pd
 
 # Ranks written to the output table, in descending order. This is the union of
 # what the supported callers produce: vConTACT3 predicts realm..genus (it has no
-# species rank), VITAP realm..species (it has no subfamily), MMseqs2's LCA
-# reaches species but never subfamily.
+# species rank) and VITAP realm..species (it has no subfamily). Subfamily is
+# kept because a caller that reports it may be added later, and dropping a rank
+# from this list would silently discard its assignments.
 RANKS = ["Realm", "Kingdom", "Phylum", "Class", "Order", "Family", "Subfamily",
          "Genus", "Species"]
 
 # Values that mean "this caller made no call here". Read as strings and compared
 # after stripping, because the callers disagree about how to spell a blank:
-# `parse_mmseqsTaxa.py` is invoked with `-u ""`, vConTACT3 writes an empty field
-# for pd.NA, and pandas turns an empty CSV field into NaN.
+# vConTACT3 writes an empty field for pd.NA, and pandas turns an empty CSV field
+# into NaN.
 # `singleton` and `default` are vConTACT3 status markers that it writes into
 # `realm_prediction` itself -- the first for a genome that clustered with
 # nothing, the second for one whose component got no realm. Neither is a taxon,
@@ -153,21 +154,6 @@ def read_vcontact3(path):
         if column in df.columns:
             predictions[rank] = df[column].to_numpy()
     return _clean(predictions)
-
-
-def read_mmseqs(path):
-    """The `<prefix>.tsv` written by `parse_mmseqsTaxa.py`.
-
-    Its rank columns are already named as in `RANKS`. With
-    `--taxa_db_source NCBI` it carries a `Domain` column instead of `Realm`;
-    that column is dropped rather than mapped, because NCBI's domain for viruses
-    is the superkingdom `Viruses` and not an ICTV realm.
-    """
-    df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False,
-                     na_values=[""])
-    if df.empty:
-        return _clean(pd.DataFrame(index=pd.Index([], name="contig_id")))
-    return _clean(df.set_index("contig_id"))
 
 
 # The ranks VITAP packs into its single `lineage` column, in the order it writes
@@ -280,8 +266,51 @@ def read_vitap(path):
 READERS = {
     "vitap": read_vitap,
     "vcontact3": read_vcontact3,
-    "mmseqs": read_mmseqs,
 }
+
+
+# The columns vpfkit's `read_taxonomy2()` requires, in the order it lists them.
+# It selects exactly these, drops any row whose `taxa_id` is 0, and
+# `create_vpftse_vir()` then treats a non-missing `Domain` as one of the votes
+# that make a contig viral. Nothing else in the file is read.
+TSE_RANKS = ["Domain", "Kingdom", "Phylum", "Class", "Order", "Family",
+             "Genus", "Species"]
+
+
+def write_tse_table(merged, path):
+    """Write the merged lineages in the layout `RESULTS_TSE` feeds to vpfkit.
+
+    Two columns are not a straight copy of a merged rank:
+
+    `Domain` is the ICTV realm where one was resolved, and the literal
+    `Viruses` where a lower rank was resolved but no realm was. The fallback is
+    not a placeholder: NCBI's superkingdom for every virus is `Viruses`, which
+    is what this column is defined to hold, and `create_vpftse_vir()` reads it
+    as "some caller placed this contig". Leaving it empty for a contig assigned
+    only at, say, family would drop that contig from the viral TSE without a
+    word.
+
+    `taxa_id` is 1 for a contig with any assignment and 0 for one with none,
+    because vpfkit only ever compares it against 0. It is deliberately not an
+    NCBI taxid: the callers that remain report names, not taxids, and inventing
+    a lookup here would be inventing precision.
+
+    `Subfamily` has no column in the vpfkit layout and is dropped. The complete
+    merged table, subfamily and per-rank provenance included, is `taxonomy.tsv`.
+    """
+    assigned = merged[RANKS].notna().any(axis=1)
+
+    out = pd.DataFrame(index=merged.index)
+    out["taxa_id"] = assigned.astype(int)
+    out["Domain"] = merged["Realm"].where(merged["Realm"].notna(),
+                                          pd.Series("Viruses", index=merged.index)
+                                          .where(assigned))
+    for rank in TSE_RANKS[1:]:
+        out[rank] = merged[rank]
+
+    out.to_csv(path, sep="\t", index=True, na_rep="")
+    print(f"[merge_taxonomy] {int(assigned.sum())}/{len(merged)} contigs carry an "
+          f"assignment and will reach the TSE: {path}", flush=True)
 
 
 def resolve(frames):
@@ -396,8 +425,12 @@ def summarise(merged, frames, suppressed, unbridged):
                    "the assignment in the output; PRIORITY is an integer where "
                    "smaller wins. Repeat for each caller.")
 @click.option("--fout", "-o", default="taxonomy.tsv", show_default=True,
-              help="Output table.")
-def main(sources, fout):
+              help="Output table: every rank, with the source that filled it.")
+@click.option("--fout-tse", "fout_tse", default="taxonomy_tse.tsv",
+              show_default=True,
+              help="Second output, in the layout vpfkit's read_taxonomy2() "
+                   "requires, for RESULTS_TSE to read.")
+def main(sources, fout, fout_tse):
     parsed = []
     for name, priority, path in sources:
         if name not in READERS:
@@ -430,7 +463,9 @@ def main(sources, fout):
 
     merged, suppressed, unbridged = resolve(frames)
     summarise(merged, frames, suppressed, unbridged)
-    merged.sort_index().to_csv(fout, sep="\t", index=True, na_rep="")
+    merged = merged.sort_index()
+    merged.to_csv(fout, sep="\t", index=True, na_rep="")
+    write_tse_table(merged, fout_tse)
 
 
 if __name__ == "__main__":
