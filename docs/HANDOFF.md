@@ -3,7 +3,7 @@
 State of the 2026 revival of ViroProfiler, and what a new working session needs to know.
 Companion documents: [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md) (every defect found, with status),
 [ARM64.md](dev/ARM64.md) (what can and cannot be built for aarch64),
-[PACKAGING.md](dev/PACKAGING.md) (whether to move the images to pixi).
+[PACKAGING.md](dev/PACKAGING.md) (how the images declare and freeze their dependencies).
 
 ## Where the pipeline stands
 
@@ -14,10 +14,12 @@ with `counts`, `tpm`, `tmm` and `covfrac` assays and 37 `rowData` columns. Sixte
 contigs carry a merged lineage, assembled from VITAP and vConTACT3.
 
 That is a low bar in absolute terms — two samples, 22 contigs in the dereplicated library —
-but it is the shape every change here is measured against.
+but it is the shape every change here is measured against. Reproduce it with the command under
+[Running it on this machine](#running-it-on-this-machine); anything that changes those numbers
+is a result change and needs explaining.
 
-Everything below is committed on `dev_ru` and **not pushed**, so that it can be squash-merged
-into `main`.
+Everything is committed on `dev_ru` and **not pushed**, so that it can be squash-merged into
+`main`.
 
 ## Pipeline shape
 
@@ -52,6 +54,14 @@ flowchart TD
     CAMG --> TSE
     TSE --> MQ[MULTIQC]
 ```
+
+`--mode` decides how far down that graph a run goes. The stages are cumulative — `fastqc` →
+`fastp` → `contiglib` → `all` — so a mode is a prefix of the pipeline, not a branch, and
+reporting (`CUSTOM_DUMPSOFTWAREVERSIONS`, `MULTIQC`) runs in every one of them. `setup` is
+separate: it builds databases and reads no samplesheet. The numbering lives in
+`WorkflowViroprofiler.MODE_STAGE` ([lib/WorkflowViroprofiler.groovy](../lib/WorkflowViroprofiler.groovy)),
+which is also what rejects an unknown mode and what rejects `fastqc`/`fastp` together with
+`--reads_type clean` — that combination skips both stages and would otherwise run empty.
 
 Two relationships in that graph are easy to misread and expensive to get wrong:
 
@@ -114,6 +124,38 @@ leftover of the retired vConTACT2 image and can be deleted.
 SIFs go, and defaults to `~/singularity/viroprofiler`. Once the pixi images have been used
 for a while, replace the older set and drop the `--sif_dir` override.
 
+## Testing what you change
+
+Four checks, cheapest first. The first three take seconds and need no database.
+
+```bash
+# 1. Topology. Every process runs as a no-op; proves the graph still wires up.
+nextflow run main.nf -stub -profile test_stub
+
+# 2. The mode ladder. Each mode must run its own stages and stop.
+for m in fastqc fastp contiglib all; do nextflow run main.nf -stub -profile test_stub --mode $m; done
+
+# 3. Lockfiles match their manifests. --dry-run is required: plain --check rewrites
+#    pixi.lock while exiting non-zero, absorbing the drift it just reported.
+for m in docker/*/pixi.toml; do pixi lock --check --dry-run --manifest-path "$m"; done
+
+# 4. Real data, once the above are green. Numbers to match are in the first section.
+#    --binning phamb cannot be reached here; see the arch guard.
+nextflow run main.nf -profile apptainer,arm64_local ...    # full command above
+```
+
+[`.github/workflows/stub_test.yml`](../.github/workflows/stub_test.yml) runs 1 and 2 on every
+push, plus the SE, contig-annotation, setup and optional-module variants, plus the PHAMB path
+— the runner is x86-64, which makes CI the only place `--binning phamb` is exercised at all.
+[`docker.yml`](../.github/workflows/docker.yml) runs 3.
+
+Two things none of them can tell you, so check by hand:
+
+- **Whether a changed output still has the columns its consumers read.** The stub passes
+  either way; see the second rule below.
+- **Whether a resource change took effect.** `nextflow.config` requesting 4 CPUs proves
+  nothing; `grep -c 'vclust.* -t 4' work/*/*/.command.sh` does.
+
 ## Verification discipline
 
 These are not style preferences. Each one corresponds to a defect that shipped in this
@@ -129,21 +171,36 @@ repository and stayed invisible for years.
 - **Stub tests validate topology, not schemas.** They pass whether or not a process writes the
   columns its consumers read — the DVF stub advertised `contig_id/dvf_score` while the real
   output was `name/len/score/pvalue/qvalue`, and nothing noticed. When you change an output,
-  diff the stub header against a real product.
+  diff the stub header against a real product. The taxonomy table `RESULTS_TSE` reads is where
+  this bites hardest today: [`bin/merge_taxonomy.py`](../bin/merge_taxonomy.py) writes it,
+  vpfkit's `read_taxonomy2()` demands an exact column set, and `create_vpftse_vir()` treats a
+  non-missing `Domain` as one of the votes that make a contig viral — so a renamed column
+  there shrinks the viral TSE instead of raising anything.
 - **Loosening a version pin on a 2022-era tool is not an upgrade, it is an untested
   environment.** Unpinned solves reached Python 3.14, setuptools 84, snakemake 8, numpy 1.24,
   scipy 1.15 and pandas 3 — breaking DRAM, vConTACT2/3, VirSorter2, eggNOG-mapper and bacphlip
   in five different ways. See [PACKAGING.md](dev/PACKAGING.md): the real fix is lockfiles.
-- **A subagent or Codex finding is a lead, not a fact.** Of fifteen Codex findings across this
-  work, seven survived verification. Check each against the code before acting.
+- **A subagent or Codex finding is a lead, not a fact.** Roughly half survive verification.
+  The failure mode worth naming is the finding that is *correct about the excerpt it was
+  shown*: an elided block in a review prompt produced a confident, mechanically sound report
+  that `CUSTOM_DUMPSOFTWAREVERSIONS` never runs under `--mode contiglib --reads_type clean`,
+  which four `ch_versions.mix` calls just outside the excerpt disprove. Verify against the
+  file, not the excerpt — and when a finding does hold, follow it past the symptom: the
+  report that VAMB's `--jgi` pairs depths positionally is what exposed that the pinned VAMB
+  had no `--jgi` at all.
+- **A clean solve is not a working environment.** Some conda packages ship only a post-link
+  script that fetches what they nominally provide. micromamba runs those, pixi does not, and
+  the difference shows up in neither the solve nor the lockfile — `bioconductor-genomeinfodbdata`
+  consists of nothing else, and without it `GenomeInfoDb` installs and cannot be loaded. This is
+  why every Dockerfile ends with a smoke test that exercises the tools under `env -i` with the
+  image's own `PATH`.
 
 ## How the images are built
 
 Every image except `viroprofiler-host` is built by pixi from a committed lockfile:
 `docker/viroprofiler-*/pixi.toml` states the intent, `pixi.lock` records what was chosen, and
-`pixi install --locked` fails the build if the two disagree. Each Dockerfile ends with a smoke
-test under `env -i` — the environment `.command.sh` actually runs in — so a tool that is
-importable but not on `PATH` fails at build time rather than mid-run.
+`pixi install --locked` fails the build if the two disagree, and each Dockerfile ends with the
+`env -i` smoke test described above.
 
 Re-lock deliberately and re-test; a lock refreshed as a side effect of a rebuild is exactly
 the failure mode it exists to prevent. In CI gate on `pixi lock --check --dry-run`: plain
@@ -159,14 +216,23 @@ Ordered by how much they change results.
 
 1. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
    local SIFs — `vcontact3`, `vclust`, `vitap`, `genomad`, `checkamg` were never published,
-   and the rest now differ from what is published — so every profile other than `arm64_local`
-   is currently broken. This is the last step before anyone else can run the pipeline.
-2. **Run on amd64.** Nothing here has been built or run on x86-64. `--binning phamb` and
-   `--use_iphop` in particular have *no* aarch64 execution path at all, so their first real
-   test will be that run.
-3. **Restore the `.github/workflows/docker.yml` build matrix**, with
-   `pixi lock --check --dry-run` as a gate. Every entry is commented out, so no image is built
-   by CI on either architecture, and a lockfile nothing verifies is a comment.
+   and every other image now differs in content from the tag it names — so every profile other
+   than `arm64_local` is currently broken. This is the last step before anyone else can run
+   the pipeline. Bump the tags rather than overwriting: an image built from a lockfile and one
+   built from a loose environment file are not the same artifact, and reusing `v0.2`/`v0.3`
+   would leave existing installations silently on the old one.
+2. **Run on amd64.** Nothing here has been built or run on x86-64, and two paths have no
+   aarch64 execution route at all, so that run is their first real test:
+   - `--binning phamb`, end to end. Watch VAMB in particular: the depth table is built in
+     FASTA order by name lookup because `--jgi` pairs depths to contigs positionally, and the
+     process asserts the row count, so a mismatch fails loudly rather than clustering on
+     shuffled abundances. Then check that `run_RF.py` resolves to `/usr/local/bin/run_RF.py`
+     and that `vambbins_RF_predictions.txt` is non-empty.
+   - `--use_iphop`, which is forced off in the arm64 profile.
+3. **Restore the `.github/workflows/docker.yml` build matrix.** Every entry is still
+   commented out, so no image is built by CI on either architecture. The lockfile gate that
+   should accompany it (`check_locks`) is already in place; what is missing is the build and
+   push itself, which is the same work as item 1.
 4. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
    process reads it — everything that runs VirSorter2 carries the `viroprofiler_virsorter2`
    label and gets its own image — and it is worth about 1 GB. It was left in place so that the
@@ -176,7 +242,7 @@ Ordered by how much they change results.
 
 ## Limits of what has been verified
 
-- **Only one dataset, and a small one.** Two samples, 23 contigs. Cluster-level agreement
+- **Only one dataset, and a small one.** Two samples, 22 contigs. Cluster-level agreement
   between the old BLAST recipe and Vclust was measured on a purpose-built 1600-sequence set
   (99.88 % of clusters identical), but real behaviour at 10⁵ contigs is untested — which
   matters most for the `-max_target_seqs` truncation the switch was meant to fix, since that
