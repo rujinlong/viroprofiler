@@ -56,6 +56,7 @@ usability defect · **P3** hygiene.
 | [I-45](#i-45) | P0 | Config — the pipeline does not parse under Nextflow's default config parser | Open |
 | [I-46](#i-46) | P1 | Modules — iPHoP, CheckAMG and DRAM-v results never reached `RESULTS_TSE` | Fixed |
 | [I-47](#i-47) | P2 | Config — 432 lines of iGenomes reference config that nothing reads | Fixed |
+| [I-48](#i-48) | P1 | Config — a scheduler's `TMPDIR` points outside the container, and DRAM-v dies on it | Fixed |
 
 ---
 
@@ -1170,3 +1171,32 @@ every run, against a table only it consulted.
 
 Removed. `workflows/contig_anno.nf` also imported `RESULTS_TSE` without ever calling it; that
 import is gone too.
+
+
+---
+
+## I-48
+
+**A scheduler's `TMPDIR` points outside the container, and DRAM-v dies on it.** P1. Fixed.
+
+`TMPDIR` is inherited from whatever launched the pipeline. Under a batch scheduler it
+normally names node-local scratch — `/localscratch/<user>/slurm/<jobid>/tmp` here. Nextflow
+binds the task directory into the container and nothing else, so a tool that writes to
+`$TMPDIR` by absolute path finds no such directory:
+
+```
+tRNAscan-SE ... experienced an error: Unable to open
+/localscratch/allen/slurm/2615/tmp/tscan87374.fpass for writing.  Aborting program.
+```
+
+DRAM-v reached that call **nine minutes in**, after kofam, viral, peptidase, pfam, dbCAN and
+VOGDB had all completed, and the whole process was lost. Only tRNAscan-SE was affected
+because it is the one tool in this pipeline that builds an absolute scratch path from
+`TMPDIR`; the rest write relative paths into the task directory and never noticed.
+
+It does not reproduce interactively, where `TMPDIR` is `/tmp` and Apptainer provides one.
+
+**Resolution.** `conf/base.config` sets `beforeScript = 'export TMPDIR="$PWD"'` for every
+process. The task directory is bound by definition and lives on the work filesystem, which
+is where large scratch files belong. Verified by checking that the export reaches all 26
+task scripts in a stub run, rather than by assuming a directive took effect.
