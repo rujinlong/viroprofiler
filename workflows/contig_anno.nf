@@ -90,7 +90,7 @@ workflow CONTIGANNO {
         VIBRANT(ch_nrclib)
         ch_vibrant_list = VIBRANT.out.vibrant_list_ch
     } else {
-        ch_vibrant_list = Channel.fromPath("${projectDir}/assets/no_vibrant_contigs.list").first()
+        ch_vibrant_list = channel.fromPath("${projectDir}/assets/no_vibrant_contigs.list").first()
     }
 
     VIRCONTIGS_PRE(ch_nrclib, GENOMAD.out.genomad_list_ch, CHECKV.out.checkv2vContigs_ch, ch_vibrant_list)
@@ -118,8 +118,8 @@ workflow CONTIGANNO {
     } else {
         // An empty VITAP result, so that TAXONOMY_MERGE reads a source with no
         // assignments rather than being given a different set of inputs.
-        ch_taxa_vitap = Channel.fromPath("${projectDir}/assets/no_vitap/best_determined_lineages.tsv").first()
-        ch_taxa_vitap_ref = Channel.fromPath("${projectDir}/assets/no_vitap/ICTV_selected_genomes.fasta").first()
+        ch_taxa_vitap = channel.fromPath("${projectDir}/assets/no_vitap/best_determined_lineages.tsv").first()
+        ch_taxa_vitap_ref = channel.fromPath("${projectDir}/assets/no_vitap/ICTV_selected_genomes.fasta").first()
     }
     TAXONOMY_VCONTACT3(ch_nrclib)
     TAXONOMY_MERGE(ch_taxa_vitap, ch_taxa_vitap_ref, TAXONOMY_VCONTACT3.out.taxa_vc_ch)

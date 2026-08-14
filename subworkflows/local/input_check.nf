@@ -22,7 +22,7 @@ workflow INPUT_CHECK {
     main:
     def sheet_dir = file(params.input).parent
 
-    ch_input_rows = Channel
+    ch_input_rows = channel
         .from(ch_input)
         .splitCsv(header: true)
         .map { row ->

@@ -83,11 +83,11 @@ workflow VIROPROFILER {
         // that rejects an unknown mode, both live in WorkflowViroprofiler.MODE_STAGE.
         def stage = WorkflowViroprofiler.stageOf(params)
 
-        ch_multiqc_files = Channel.empty()
+        ch_multiqc_files = channel.empty()
 
         // Check mandatory parameters
         if (params.input) { ch_input = file(params.input) } else { exit 1, 'Input samplesheet not specified!' }
-        ch_versions = Channel.empty()
+        ch_versions = channel.empty()
 
         //
         // SUBWORKFLOW: Read in samplesheet, validate and stage input files
@@ -105,7 +105,7 @@ workflow VIROPROFILER {
                 INPUT_CHECK.out.reads
             )
             ch_versions = ch_versions.mix(FASTQC.out.versions.first())
-            ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]}.ifEmpty([]))
+            ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect { it -> it[1] }.ifEmpty([]))
         }
 
         //
@@ -121,7 +121,7 @@ workflow VIROPROFILER {
                     INPUT_CHECK.out.reads, false, false
                 )
                 ch_versions = ch_versions.mix(FASTP.out.versions.first())
-                ch_multiqc_files = ch_multiqc_files.mix(FASTP.out.json.collect{it[1]}.ifEmpty([]))
+                ch_multiqc_files = ch_multiqc_files.mix(FASTP.out.json.collect { it -> it[1] }.ifEmpty([]))
 
                 // Decontamination
                 if (params.use_decontam) {
@@ -130,7 +130,7 @@ workflow VIROPROFILER {
                         exit 1, "Decontamination is enabled but no reference index was found at '${contamref}'.\n" +
                                 "Build a BBMap index there, point --contamref_idx at an existing one, or pass --use_decontam false."
                     }
-                    ch_contamref = Channel.fromPath(contamref, checkIfExists: true).first()
+                    ch_contamref = channel.fromPath(contamref, checkIfExists: true).first()
                     DECONTAM (FASTP.out.reads, ch_contamref)
                     ch_clean_reads = DECONTAM.out.reads
                     ch_versions = ch_versions.mix(DECONTAM.out.versions.first())
@@ -150,7 +150,7 @@ workflow VIROPROFILER {
         if (stage >= WorkflowViroprofiler.MODE_STAGE['contiglib']) {
             // if input_contigs is specified, set ch_cclib to input_contigs, otherwise set to CONTIGLIB.out.cclib_long_ch
             if (params.input_contigs) {
-                ch_cclib = Channel.fromPath("${params.input_contigs}", checkIfExists: true).first()
+                ch_cclib = channel.fromPath("${params.input_contigs}", checkIfExists: true).first()
             } else {
                 // Run spades
                 SPADES (
@@ -248,8 +248,8 @@ workflow VIROPROFILER {
                 // three candidate sources unconditionally. RESULTS_TSE instead gets a
                 // placeholder and drops the argument, so a VIBRANT-less run produces a TSE
                 // with no vibrant_* columns rather than columns that are silently all NA.
-                ch_vibrant_list = Channel.fromPath("${projectDir}/assets/no_vibrant_contigs.list").first()
-                ch_vibrant_quality = Channel.fromPath("${projectDir}/assets/optional/no_vibrant").first()
+                ch_vibrant_list = channel.fromPath("${projectDir}/assets/no_vibrant_contigs.list").first()
+                ch_vibrant_quality = channel.fromPath("${projectDir}/assets/optional/no_vibrant").first()
             }
 
             VIRCONTIGS_PRE(ch_nrclib, ch_genomad_list, CHECKV.out.checkv2vContigs_ch, ch_vibrant_list)
@@ -267,10 +267,10 @@ workflow VIROPROFILER {
                     // Not under `-stub`, where no process reads a database at all.
                     def phamb_hmms = ["${params.db}/vogdb/AllVOG.hmm",
                                       "${params.db}/micomplete/Bact105.hmm"]
-                    def missing_hmms = workflow.stubRun ? [] : phamb_hmms.findAll { !file(it).exists() }
+                    def missing_hmms = workflow.stubRun ? [] : phamb_hmms.findAll { hmm -> !file(hmm).exists() }
                     if (missing_hmms) {
                         exit 1, "--binning phamb needs HMM sets that are not present:\n" +
-                                missing_hmms.collect { "  ${it}" }.join("\n") + "\n" +
+                                missing_hmms.collect { hmm -> "  ${hmm}" }.join("\n") + "\n" +
                                 "Build them with '--mode setup --use_phamb true', or use --binning vrhyme."
                     }
 
@@ -323,8 +323,8 @@ workflow VIROPROFILER {
                 // inputs. The two files together are what `read_vitap` expects:
                 // the lineage table, and the reference genomes to subtract from
                 // it.
-                ch_taxa_vitap = Channel.fromPath("${projectDir}/assets/no_vitap/best_determined_lineages.tsv").first()
-                ch_taxa_vitap_ref = Channel.fromPath("${projectDir}/assets/no_vitap/ICTV_selected_genomes.fasta").first()
+                ch_taxa_vitap = channel.fromPath("${projectDir}/assets/no_vitap/best_determined_lineages.tsv").first()
+                ch_taxa_vitap_ref = channel.fromPath("${projectDir}/assets/no_vitap/ICTV_selected_genomes.fasta").first()
             }
             TAXONOMY_VCONTACT3(vContigs_and_vMAGs)
             TAXONOMY_MERGE(ch_taxa_vitap, ch_taxa_vitap_ref, TAXONOMY_VCONTACT3.out.taxa_vc_ch)
@@ -365,7 +365,7 @@ workflow VIROPROFILER {
             // sample name: INPUT_CHECK rejects a samplesheet that is not exactly three
             // columns, so the phenotypes cannot travel with the reads.
             ch_sample_metadata = params.sample_metadata
-                ? Channel.fromPath(params.sample_metadata, checkIfExists: true).first()
+                ? channel.fromPath(params.sample_metadata, checkIfExists: true).first()
                 : no_file('sample_metadata')
 
             RESULTS_TSE (
@@ -398,9 +398,9 @@ workflow VIROPROFILER {
         // MODULE: MultiQC
         //
         workflow_summary    = WorkflowViroprofiler.paramsSummaryMultiqc(workflow, summary_params)
-        ch_workflow_summary = Channel.value(workflow_summary)
+        ch_workflow_summary = channel.value(workflow_summary)
 
-        ch_multiqc_files = ch_multiqc_files.mix(Channel.from(ch_multiqc_config))
+        ch_multiqc_files = ch_multiqc_files.mix(channel.from(ch_multiqc_config))
         ch_multiqc_files = ch_multiqc_files.mix(ch_multiqc_custom_config.collect().ifEmpty([]))
         ch_multiqc_files = ch_multiqc_files.mix(ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
         ch_multiqc_files = ch_multiqc_files.mix(CUSTOM_DUMPSOFTWAREVERSIONS.out.mqc_yml.collect())
