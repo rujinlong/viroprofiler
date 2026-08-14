@@ -32,7 +32,9 @@ process and nothing that needs more than one sample per group — no ordination,
 no group comparison of any kind. Use the sixteen-sample set for anything statistical.
 
 Everything is committed on `dev_ru` and **not pushed**, so that it can be squash-merged into
-`main`.
+`main`. The same is true of [vpfkit](#the-r-side-vpfkit-and-the-viewer) on its `dev` branch,
+where `R CMD check` is clean and 1106 tests pass. Neither push has happened, and one of them
+gates the other: the viewer image installs vpfkit from GitHub at a pinned commit.
 
 ## Pipeline shape
 
@@ -159,6 +161,73 @@ leftover of the retired vConTACT2 image and can be deleted.
 SIFs go, and defaults to `~/singularity/viroprofiler`. Once the pixi images have been used
 for a while, replace the older set and drop the `--sif_dir` override.
 
+## The R side: vpfkit and the viewer
+
+The pipeline's last process, `RESULTS_TSE`, is an R script that calls
+[vpfkit](https://github.com/deng-lab/vpfkit), a separate repository checked out at
+`~/github/rujinlong/vpfkit` (branch `dev`). Everything downstream of the tool outputs lives
+there: the readers, the object constructor, the Shiny viewer, the Quarto report and the
+exporters. Changing either repository without the other is the main way to break this.
+
+```mermaid
+flowchart LR
+    subgraph VP["viroprofiler"]
+        TOOLS[per-tool tables<br/>CheckV, geNomad, VirSorter2,<br/>VIBRANT, CheckAMG, DRAM-v,<br/>iPHoP, CoverM, taxonomy] --> CTSE[bin/create_tse.r]
+    end
+    subgraph VK["vpfkit"]
+        CTSE --> CV["create_vpftse()<br/>one reader per tool"]
+        CV --> AVV["annotate_viral_votes()"]
+        AVV --> CVV["create_vpftse_vir()"]
+        CVV --> TSE[(TreeSummarizedExperiment)]
+        TSE --> APP["run_app()<br/>Shiny viewer"]
+        TSE --> REP["generate_report()<br/>Quarto HTML"]
+        TSE --> EXP["export_*()"]
+    end
+    META[--sample_metadata] --> CTSE
+```
+
+*The pipeline produces tables; every interpretation of them is vpfkit's. `RESULTS_TSE` is the
+only place the two meet, and `bin/create_tse.r` is the whole of the interface.*
+
+Three parts of that interface are worth knowing before changing either side:
+
+- **A reader is a schema contract.** Each `read_*()` names the columns its tool writes. Rename
+  a column upstream and the reader returns nothing for it, silently, because a join that
+  matches no rows is not an error. `metadata(tse)$viroprofiler$join_match` records what
+  fraction of each tool's rows found a contig; a number far below what the tool should have
+  produced is the symptom.
+- **Optional inputs must stay optional.** `RESULTS_TSE` passes a `create_tse.r` argument only
+  when the tool ran, and drops it otherwise, so `rowData` gains the tool's columns or none at
+  all. That is what keeps "switched off" distinguishable from "found nothing". The empty
+  placeholders live in [`assets/optional/`](../assets/optional/); adding an optional input
+  means adding one there.
+- **Assay names carry units.** `counts`, `tpm`, `trimmed_mean` and `covfrac` come from four
+  separate CoverM invocations and are four different quantities. `trimmed_mean` is a coverage
+  depth in x-fold, not a normalization; `covfrac` is a breadth in `[0, 1]` and is a detection
+  mask, never an abundance. `metadata(tse)$viroprofiler$assays` carries that description with
+  the object, and `normalize_assay_names()` maps older spellings onto the current ones.
+
+### Opening the viewer
+
+```bash
+cd ~/github/rujinlong/vpfkit
+bash dev/run_app.sh --lan --detach      # every interface, port 7474, keeps running
+bash dev/run_app.sh --status
+bash dev/run_app.sh --stop
+```
+
+On this host that is `http://192.168.2.5:7474`. `--lan` also exposes the "Path on this
+server" input, which loads any `.rds` the account can read; `--no-server-path` turns that off
+and leaves upload working.
+
+The reference objects to open are
+
+| Object | What it is good for |
+|---|---|
+| [`/mnt/nas26/testdata/viroprofiler_16sample/run_final/results/viroprofiler_output.rds`](file:///mnt/nas26/testdata/viroprofiler_16sample/run_final/results/) | Everything. 16 samples, two groups, DRAM-v and CheckAMG annotations. |
+| `.../viroprofiler_output_all_contigs.rds` | The same run before the viral subset, for checking what the vote dropped. |
+| `/home/allen/data2/testdata/viroprofiler_real_full/results/viroprofiler_output.rds` | The two-sample object, for the degraded paths: no groups, no gene annotations, legacy `tmm` assay name. |
+
 ## Testing what you change
 
 Four checks, cheapest first. The first three take seconds and need no database.
@@ -184,12 +253,32 @@ push, plus the SE, contig-annotation, setup and optional-module variants, plus t
 — the runner is x86-64, which makes CI the only place `--binning phamb` is exercised at all.
 [`docker.yml`](../.github/workflows/docker.yml) runs 3.
 
-Two things none of them can tell you, so check by hand:
+A change that touches what `RESULTS_TSE` writes needs vpfkit's checks too:
+
+```bash
+cd ~/github/rujinlong/vpfkit
+Rscript -e 'devtools::test()'          # 1106 assertions, no network, seconds
+Rscript -e 'devtools::check()'         # currently 0 errors, 0 warnings, 0 notes
+
+# The viewer, in a real browser. Needs shinytest2 and a chromium.
+NOT_CRAN=true CHROMOTE_CHROME=/snap/bin/chromium Rscript dev/verify_app_headless.R
+```
+
+`dev/verify_app_headless.R` defaults to the sixteen-sample object; point
+`VPFKIT_TEST_TSE` at another one to check it. It exists because a browser walk over this app
+passes without testing anything in two different ways — the dataset has to be *loaded*, not
+merely chosen, and Shiny suspends outputs on inactive tabs — and its header says so.
+
+Three things none of these can tell you, so check by hand:
 
 - **Whether a changed output still has the columns its consumers read.** The stub passes
   either way; see the second rule below.
 - **Whether a resource change took effect.** `nextflow.config` requesting 4 CPUs proves
   nothing; `grep -c 'vclust.* -t 4' work/*/*/.command.sh` does.
+- **Whether the viewer image contains the vpfkit you just changed.** It installs from GitHub
+  at a pinned commit, so a local edit reaches `RESULTS_TSE` only after a push and a
+  `VPFKIT_REF` bump. Until then, build the image from the working tree — that is what
+  `denglab/viroprofiler-viewer:localtest` is, and why it is not a release artifact.
 
 ## Verification discipline
 
@@ -282,8 +371,30 @@ Ordered by how much they change results.
    process reads it — everything that runs VirSorter2 carries the `viroprofiler_virsorter2`
    label and gets its own image — and it is worth about 1 GB. It was left in place so that the
    pixi migration changed packaging and nothing else.
-7. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md), including the committed
+7. **Give the viewer something to say about iPHoP.** Host prediction is the one annotation
+   family with no real data behind it anywhere in this stack: iPHoP has no aarch64 build, so
+   its `RESULTS_TSE` slot has only ever carried a placeholder and `read_iphop()` has only
+   been checked against a fixture. The first amd64 run is where both get tested.
+8. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md), including the committed
    `output_stub*` directories and the literal `${HOME}` in `assets/samplesheet_contigs.csv`.
+
+On the vpfkit side, ordered the same way:
+
+1. **Decide what `create_vpftse_vir()` should mean.** It keeps a contig if *any* detector
+   calls it, which makes the viral set a union of five tools' sensitivities rather than a
+   consensus. `rowData$viral_vote_n` now records how many agreed, and on the reference run
+   fifteen contigs rest on a single vote. `rule = "candidate"` is implemented as an
+   alternative — it uses the pipeline's own candidate list — but the default is unchanged
+   because switching it changes every existing user's output.
+2. **`rpb2bpb()` assumes 150 bp reads.** Measured against the reference run the true mean
+   aligned length is about 125 bp, so it overstates depth by roughly 20 %. The function is
+   also a worse estimate of something CoverM already computes exactly as `trimmed_mean`;
+   deprecating it is probably better than fixing the constant.
+3. **Publish the demo datasets properly.** `inst/extdata/` carries two synthetic objects so
+   the viewer has something to open with no files at all. They are generated by
+   `dev/make_test_data.R` and were not regenerated after the assay rename, so they still use
+   the legacy `tmm` spelling — which the viewer handles, and which makes them a useful test
+   of exactly that path.
 
 ## Limits of what has been verified
 
