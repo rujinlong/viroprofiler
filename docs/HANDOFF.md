@@ -46,7 +46,7 @@ no group comparison of any kind. Use the sixteen-sample set for anything statist
 This is 1.0.1, the first release since the published version. Everything is committed on
 `dev_ru` and **not pushed**, so that it can be squash-merged into `main`. The same is true of
 [vpfkit](#the-r-side-vpfkit-and-the-viewer) 0.6.0 on its `dev` branch, where `R CMD check` is
-clean and 1106 tests pass. The vpfkit push gates the other: `VPFKIT_REF` now names a commit
+clean and 1107 tests pass. The vpfkit push gates the other: `VPFKIT_REF` now names a commit
 that exists nowhere but the local checkout, so the viewer image cannot be built until it is
 pushed.
 
@@ -275,7 +275,7 @@ A change that touches what `RESULTS_TSE` writes needs vpfkit's checks too:
 
 ```bash
 cd ~/github/rujinlong/vpfkit
-Rscript -e 'devtools::test()'          # 1106 assertions, no network, seconds
+Rscript -e 'devtools::test()'          # 1107 assertions, no network, seconds
 Rscript -e 'devtools::check()'         # currently 0 errors, 0 warnings, 0 notes
 
 # The viewer, in a real browser. Needs shinytest2 and a chromium.
