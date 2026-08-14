@@ -23,7 +23,7 @@ jobs:
       - name: Install Nextflow
         uses: nf-core/setup-nextflow@v2
         with:
-          version: ">=23.04.0"
+          version: ">=26.04.0"
 
       - name: Run stub test
         run: |
@@ -65,7 +65,7 @@ jobs:
       - name: Install Nextflow
         uses: nf-core/setup-nextflow@v2
         with:
-          version: ">=23.04.0"
+          version: ">=26.04.0"
 
       - name: Run stub test
         run: |
@@ -108,7 +108,7 @@ jobs:
       - name: Install Nextflow
         uses: nf-core/setup-nextflow@v2
         with:
-          version: ">=23.04.0"
+          version: ">=26.04.0"
 
       - name: Run stub test
         run: |
@@ -150,7 +150,7 @@ jobs:
       - name: Install Nextflow
         uses: nf-core/setup-nextflow@v2
         with:
-          version: ">=23.04.0"
+          version: ">=26.04.0"
 
       - name: Run stub test
         run: |
@@ -192,7 +192,7 @@ jobs:
       - name: Install Nextflow
         uses: nf-core/setup-nextflow@v2
         with:
-          version: ">=23.04.0"
+          version: ">=26.04.0"
 
       - name: Run stub test
         run: |
@@ -240,7 +240,7 @@ jobs:
       - name: Install Nextflow
         uses: nf-core/setup-nextflow@v2
         with:
-          version: ">=23.04.0"
+          version: ">=26.04.0"
 
       - name: Run stub test
         run: |
@@ -288,7 +288,7 @@ jobs:
       - name: Install Nextflow
         uses: nf-core/setup-nextflow@v2
         with:
-          version: ">=23.04.0"
+          version: ">=26.04.0"
 
       - name: Each mode stops where it should
         run: |
