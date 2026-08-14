@@ -185,6 +185,11 @@ They are not style preferences.
   parameters to the `params { }` declaration block, matching `"type"` in
   `nextflow_schema.json`. Only `Boolean`, `Integer` and `Float` convert a command-line
   string; `Number`, `Double` and `BigDecimal` reject it. Values stay in `nextflow.config`.
+  Watch for two cases the schema will not catch: a parameter in `schema_ignore_params`, which
+  validation never sees at all — that is how `--single_end false` turned single-end mode on —
+  and a parameter whose "off" value is the boolean `false` while its "on" values are strings.
+  For the second, make the off value a string too and match against the real values rather
+  than testing for truth, as `params.binning` does.
 - **`process.resourceLimits` must stay below the `profiles` block.** It is evaluated where it
   is written, not per task, so moving it into `conf/base.config` would freeze it to the
   defaults and silently ignore the lower ceilings `test`, `test_stub` and `custom.config` set.
