@@ -397,8 +397,9 @@ Ordered by how much they change results.
    family with no real data behind it anywhere in this stack: iPHoP has no aarch64 build, so
    its `RESULTS_TSE` slot has only ever carried a placeholder and `read_iphop()` has only
    been checked against a fixture. The first amd64 run is where both get tested.
-7. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md), including the committed
-   `output_stub*` directories and the literal `${HOME}` in `assets/samplesheet_contigs.csv`.
+7. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md): the VOGDB host and its
+   plain-HTTP URL (I-09), database setup steps that are not resumable (I-10), and the
+   vendored nf-core modules pinned to 2022 releases (I-19).
 
 On the vpfkit side, ordered the same way:
 

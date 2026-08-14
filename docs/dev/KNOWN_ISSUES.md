@@ -21,14 +21,14 @@ usability defect · **P3** hygiene.
 | [I-10](#i-10) | P2 | Databases — setup steps are not resumable and never verified | Open |
 | [I-11](#i-11) | P2 | Workflow — `--mode fastqc` / `fastp` / `contiglib` not honoured | Fixed |
 | [I-12](#i-12) | P2 | Config — `docker.userEmulation` removed in modern Nextflow | Fixed |
-| [I-13](#i-13) | P3 | Repo — stub output directories committed despite `.gitignore` | Open |
+| [I-13](#i-13) | P3 | Repo — stub output directories committed despite `.gitignore` | Fixed |
 | [I-14](#i-14) | P3 | Docs — `CLAUDE.md` references an MCP server that is not part of the repo | Fixed |
 | [I-15](#i-15) | P1 | Config — `contamref_idx` ignores `--db` and nothing ever creates it | Partly fixed — follows `--db`, still not built by setup |
 | [I-16](#i-16) | P1 | Config — `modules.config` loaded after `profiles`, so containers were unoverridable | Fixed |
 | [I-17](#i-17) | P2 | Containers — Dockerfiles call `wget` that is only present transitively | Fixed |
 | [I-18](#i-18) | P2 | Containers — DeepVirFinder bundled into the binning image | Fixed |
 | [I-19](#i-19) | P2 | Modules — vendored nf-core modules and their containers are from 2022 | Open |
-| [I-20](#i-20) | P3 | Assets — `samplesheet_contigs.csv` contains a literal `${HOME}` | Open |
+| [I-20](#i-20) | P3 | Assets — `samplesheet_contigs.csv` contains a literal `${HOME}` | Fixed |
 | [I-21](#i-21) | P1 | Containers — 2022-era tools break on modern Python/setuptools | Fixed |
 | [I-22](#i-22) | P0 | Containers — DRAM 1.4 source file copied over a DRAM 1.3.5 install | Fixed |
 | [I-23](#i-23) | P1 | Databases — DRAM `CONFIG` hand-written from 2021 filenames and today's date | Fixed |
@@ -41,7 +41,7 @@ usability defect · **P3** hygiene.
 | [I-30](#i-30) | P0 | Databases — VOGDB moved its profiles into a subdirectory; DRAM builds an empty HMM file | Fixed |
 | [I-31](#i-31) | P1 | Databases — files unpacked by tar can land unreadable by their own owner | Fixed |
 | [I-32](#i-32) | P1 | Modules — vConTACT2 taxonomy derived from a SPAdes naming convention | Fixed — replaced by vConTACT3 |
-| [I-33](#i-33) | P0 | Containers — `RESULTS_TSE` cannot read its own gzipped abundance inputs | Open |
+| [I-33](#i-33) | P0 | Containers — `RESULTS_TSE` cannot read its own gzipped abundance inputs | Fixed |
 | [I-34](#i-34) | P2 | Modules — `-max_target_seqs` makes contig dereplication depend on library size | Fixed — BLAST chain replaced by Vclust |
 | [I-35](#i-35) | P3 | Modules — exact duplicate contigs entered the O(n²) dereplication stage | Fixed |
 | [I-36](#i-36) | P1 | Modules — `PHAMB_RF` calls a CLI the installed phamb does not have | Fixed |
@@ -354,6 +354,9 @@ contigs,${HOME}/viroprofiler/testdata/viroprofiler-test/contigs.fasta
 The file is also unused: contig-only runs are driven by `--input_contigs`, not by a
 samplesheet.
 
+**Resolution.** The path is `/path/to/contigs.fasta`. `docs/quickstart.md` had the same
+`${HOME}` in its example samplesheet and got the same substitution.
+
 <a id="i-21"></a>
 ## I-21 — 2022-era tools break on a modern Python/setuptools (P1)
 
@@ -659,6 +662,10 @@ default:user::---
 default:user:allen:rwx
 
 $ tar xzf probe.tar.gz -C /mnt/scratch/db/probe && ls -l /mnt/scratch/db/probe
+**Resolution.** `output_stub_v2/` and `output_stub_contiganno_v2/` are untracked and
+deleted; `.gitignore` already carried `output_stub*`, which is why they were invisible
+after the first commit that added them.
+
 ----rw---- 1 allen uucp 1 probe          # archived as -rw-rw-r--
 ```
 
@@ -755,6 +762,10 @@ This cannot be fixed from this repository as it stands, which is the point of
 [I-02](#i-02): the viewer image has no Dockerfile here, so `R.utils` cannot be
 added to it. Either that image gains a Dockerfile and the package, or
 `RESULTS_TSE` decompresses the three files before calling `create_tse.r`.
+
+**Resolution.** `R.utils` is in the viewer image and `vpfkit` lists it under `Imports`.
+Verified in the pixi-built image, and end to end: the sixteen-sample run reads the gzipped
+abundance tables and writes its `.rds`.
 
 <a id="i-34"></a>
 ## I-34 — `-max_target_seqs` makes contig dereplication depend on library size (P2)
