@@ -455,23 +455,21 @@ On the vpfkit side, ordered the same way:
 - **The iPHoP slot of `RESULTS_TSE` has never carried a real file.** iPHoP cannot run on
   aarch64, so every run here passed the placeholder. `read_iphop()` was checked against
   iPHoP's documented output and a fixture, not against a table this pipeline produced.
-- **Of the three database paths that had never been run, one works, one was broken, and one
-  is still untested.** `--mode setup` against an empty `--db` found it:
-  - `DB_CHECKAMG` downloads, verifies and publishes. 41 GB — much the largest database here
-    after DRAM, and worth knowing before pointing `--db` at a small filesystem.
-  - `DB_VCONTACT3` could not download at all: `vcontact3 prepare_databases` shells out to
-    `curl`, which was not in the image ([I-52](dev/KNOWN_ISSUES.md#i-52)). Its own content
-    check caught it and refused to publish, which is what that check is for. `curl` is now
-    in the manifest and the lock; the rebuilt image has not yet been run against the
-    download.
-  - `DB_GENOMAD` still has not run. The vConTACT3 failure stopped the run before it was
-    submitted.
+- **The three database paths that had never been run have now run, and one of them was
+  broken.** `--mode setup` against an empty `--db` found it:
 
-  That run also showed that the `[ ! -d ${params.db}/<tool> ]` guard every `DB_*` process
-  uses is evaluated **inside the container**, so a database supplied as a symlink whose
-  target is not in `--container_binds` looks absent and is downloaded again
-  ([I-53](dev/KNOWN_ISSUES.md#i-53)). `--container_binds` matters for `--mode setup`, not
-  only for a run.
+  | Process | Result |
+  |---|---|
+  | `DB_CHECKAMG` | Downloads, verifies, publishes. **41 GB** — the largest database here after DRAM, worth knowing before pointing `--db` at a small filesystem |
+  | `DB_GENOMAD` | Downloads, verifies, publishes. 1.4 GB |
+  | `DB_VCONTACT3` | Could not download at all: `vcontact3 prepare_databases` shells out to `curl`, which was not in the image ([I-52](dev/KNOWN_ISSUES.md#i-52)). Its own content check caught it and refused to publish, which is what that check is for. With `curl` in the manifest and the image rebuilt: 14 GB, verified, published |
+
+  That first attempt also showed that the `[ ! -d ${params.db}/<tool> ]` guard every `DB_*`
+  process uses is evaluated **inside the container**, so a database supplied as a symlink
+  whose target is not in `--container_binds` looks absent and is downloaded again
+  ([I-53](dev/KNOWN_ISSUES.md#i-53)) — `DB_CHECKV` re-fetched 6.4 GB before failing on an
+  `mv` collision. With the binds passed, all three pre-seeded databases skipped correctly.
+  `--container_binds` matters for `--mode setup`, not only for a run.
 - **`DRAM-setup.py prepare_databases` with `--use_uniref` was never attempted** (hundreds of
   GB); the pipeline builds with `--skip_uniref`.
 - **Every pixi image has been compared against its micromamba predecessor, and none of them

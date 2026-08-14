@@ -1355,7 +1355,9 @@ v232/RefSeq.232.0.3.mmseq_0.3_clu is not an mmseqs clustering database.
 **Resolution.** `curl` is in `docker/viroprofiler-vcontact3/pixi.toml` and the lockfile is
 regenerated. The re-lock added `curl` and its dependency chain — `libcurl`, `krb5`,
 `libnghttp2`, `libpsl`, `libedit`, `libev`, `icu`, `keyutils` — and moved no package that was
-already pinned.
+already pinned. Verified end to end with the rebuilt image: `DB_VCONTACT3` downloads,
+verifies and publishes 14 GB. `DB_GENOMAD`, which the failure had stopped from running at
+all, publishes 1.4 GB in the same run.
 
 ---
 
@@ -1381,6 +1383,10 @@ the symlink that was there all along.
 The failure is loud, but it names the wrong thing: an `mv` collision rather than a missing
 bind. Passing `--container_binds` with the symlink targets avoids it, which is the documented
 requirement for a *run* and is just as necessary for `--mode setup`.
+
+Passing `--container_binds` with the symlink targets makes every guard fire correctly, which
+is how the three already-built databases were skipped on the second attempt. That is the
+workaround, not the fix.
 
 Worth fixing by testing the path on the host side instead — a `when:` clause reading
 `file("${params.db}/checkv").exists()` — so that the guard sees what the user sees.
