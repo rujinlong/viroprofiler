@@ -78,8 +78,8 @@ process VIRSORTER2 {
 
     script:
     """
-    # VirSorter2 initializes its config template under $HOME/.virsorter. Nextflow runs
-    # Apptainer with --no-home, so $HOME is a read-only stub; point it at the task
+    # VirSorter2 initializes its config template under \$HOME/.virsorter. Nextflow runs
+    # Apptainer with --no-home, so \$HOME is a read-only stub; point it at the task
     # directory instead.
     export HOME=\$PWD
 

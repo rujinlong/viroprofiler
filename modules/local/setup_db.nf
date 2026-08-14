@@ -197,8 +197,8 @@ process DB_VIRSORTER2 {
 
     script:
     """
-    # VirSorter2 writes its config template under $HOME/.virsorter, and Nextflow runs
-    # Apptainer with --no-home, so $HOME is a read-only stub.
+    # VirSorter2 writes its config template under \$HOME/.virsorter, and Nextflow runs
+    # Apptainer with --no-home, so \$HOME is a read-only stub.
     export HOME=\$PWD
 
     if [ ! -d ${params.db}/virsorter2 ]; then

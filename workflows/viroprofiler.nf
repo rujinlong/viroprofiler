@@ -1,31 +1,5 @@
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    VALIDATE INPUTS
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
-
-def summary_params = NfcoreSchema.paramsSummaryMap(workflow, params)
-
-// Validate input parameters
-WorkflowViroprofiler.initialise(params, log)
-
-// TODO nf-core: Add all file path parameters for the pipeline to the list below
-// Check input path parameters to see if they exist
-def checkPathParamList = [ params.multiqc_config ]
-for (param in checkPathParamList) { if (param) { file(param, checkIfExists: true) } }
-
-
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    CONFIG FILES
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
-
-ch_multiqc_config        = file("$projectDir/assets/multiqc_config.yml", checkIfExists: true)
-ch_multiqc_custom_config = params.multiqc_config ? Channel.fromPath(params.multiqc_config) : Channel.empty()
-
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     IMPORT LOCAL MODULES/SUBWORKFLOWS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
@@ -72,10 +46,35 @@ include { RESULTS_TSE                  } from '../modules/local/base'
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// Info required for completion email and summary
-def multiqc_report = []
+// The empty stand-in for an optional RESULTS_TSE input. Passing a placeholder rather than
+// nothing is what keeps "the tool was switched off" distinguishable from "the tool found
+// nothing": RESULTS_TSE drops the matching create_tse.r argument, so rowData gains the
+// tool's columns or none at all. A file-scope function, not a closure -- the strict script
+// syntax resolves `no_file(...)` as a function name, so a closure would have to be invoked
+// as `no_file.call(...)`.
+def no_file(String slot) {
+    channel.fromPath("${projectDir}/assets/optional/no_${slot}").first()
+}
 
 workflow VIROPROFILER {
+    main:
+    // Input validation and the MultiQC config channels live in this body rather than at
+    // file scope: the strict script syntax allows no statements outside a declaration.
+    def summary_params = NfcoreSchema.paramsSummaryMap(workflow, params)
+
+    WorkflowViroprofiler.initialise(params, log)
+
+    def checkPathParamList = [ params.multiqc_config ]
+    checkPathParamList.each { param -> if (param) { file(param, checkIfExists: true) } }
+
+    def ch_multiqc_config        = file("$projectDir/assets/multiqc_config.yml", checkIfExists: true)
+    def ch_multiqc_custom_config = params.multiqc_config ? channel.fromPath(params.multiqc_config) : channel.empty()
+
+    // The MultiQC report the completion e-mail attaches, emitted for main.nf's
+    // `onComplete:` section. `--mode setup` runs no MULTIQC and leaves the placeholder,
+    // whose getVal() returns an empty list rather than blocking.
+    def ch_multiqc_report = channel.value([])
+
     if (params.mode == "setup") {
         SETUP()
     } else {
@@ -297,8 +296,6 @@ workflow VIROPROFILER {
             // ANNOTATION (AMG). CheckAMG is the auxiliary-gene caller; DRAM-v is kept
             // because its per-gene annotation table is complementary evidence, not a
             // competing AMG call.
-            def no_file = { slot -> Channel.fromPath("${projectDir}/assets/optional/no_${slot}").first() }
-
             if ( params.use_dram ) {
                 DRAMV (ch_vs2contigs, VIRSORTER2.out.vs2_affi_ch)
                 ch_versions = ch_versions.mix(DRAMV.out.versions)
@@ -411,22 +408,12 @@ workflow VIROPROFILER {
         MULTIQC (
             ch_multiqc_files.collect()
         )
-        multiqc_report = MULTIQC.out.report.toList()
-        ch_versions    = ch_versions.mix(MULTIQC.out.versions)
+        ch_multiqc_report = MULTIQC.out.report.toList()
+        ch_versions       = ch_versions.mix(MULTIQC.out.versions)
     }
-}
 
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    COMPLETION EMAIL AND SUMMARY
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
-
-workflow.onComplete {
-    if (params.email || params.email_on_fail) {
-        NfcoreTemplate.email(workflow, params, summary_params, projectDir, log, multiqc_report)
-    }
-    NfcoreTemplate.summary(workflow, params, log)
+    emit:
+    multiqc_report = ch_multiqc_report
 }
 
 /*
