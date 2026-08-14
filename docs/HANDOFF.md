@@ -410,9 +410,23 @@ On the vpfkit side, ordered the same way:
 
 - **Only one dataset.** Sixteen samples, 161 contigs, from one study. Cluster-level agreement
   between the old BLAST recipe and Vclust was measured on a purpose-built 1600-sequence set
-  (99.88 % of clusters identical), but real behaviour at 10⁵ contigs is untested — which
-  matters most for the `-max_target_seqs` truncation the switch was meant to fix, since that
-  defect only manifests on libraries large enough to trigger it.
+  (99.88 % of clusters identical); pipeline behaviour on a real library of that size is still
+  what has not been seen.
+- **Vclust at 10⁵ contigs costs two minutes and 2.9 GB, and misses a little.** Measured on
+  100,008 sequences totalling 907 Mbp, built from 11,112 CheckV representative genomes of
+  6–30 kb, each contributing itself plus eight exact sub-fragments at 50–85 % of its length.
+  Sixteen threads: deduplicate 11 s, prefilter 33 s (2.9 GB, the peak), align 73 s, cluster
+  3 s. Scale is not a problem.
+
+  Because a fragment is an exact subsequence, every group of nine *must* collapse at 95 % ANI
+  and 85 % coverage-of-the-shorter. 95.0 % of them did. The 5 % that did not follow a clean
+  gradient with fragment length — 2.42 % of the half-length fragments escaped their parent's
+  cluster, falling to 0.57 % at 85 % length — which points at the prefilter rather than the
+  clustering: `--min-ident 0.90` screens on a k-mer estimate that a short fragment of a long
+  parent fails, so the pair is dropped before `vclust align` ever measures the coverage that
+  would have kept it. Dereplication is therefore slightly incomplete for short contigs, in a
+  bounded and now-quantified way, and lowering the prefilter threshold is the lever if it
+  ever matters.
 - **Nothing has been built or run on amd64.** Every image was built natively on aarch64.
 - **`--binning phamb` has never been executed.** Its topology is exercised by the stub, the
   score-table converter is checked against phamb's own parser, and the image asserts the
@@ -433,10 +447,23 @@ On the vpfkit side, ordered the same way:
   against real databases in both directions, but the download and publish steps were not.
 - **`DRAM-setup.py prepare_databases` with `--use_uniref` was never attempted** (hundreds of
   GB); the pipeline builds with `--skip_uniref`.
-- **Two of the pixi-built images have been compared against their micromamba predecessors on
-  real data**, and both matched: `viroprofiler-replicyc` (bacphlip byte-identical on four
-  phage genomes; Replidec identical in every classification, differing only in row order and
-  the last bit of one likelihood) and `viroprofiler-base` (CheckV's `quality_summary.tsv` and
-  `checkv_qc_long.fasta`, and the contig-library clustering, all byte-identical on the
-  two-sample dataset). The remaining images are verified by their build-time smoke tests and
-  by having run in the end-to-end test, not by output comparison against the old images.
+- **Every pixi image has been compared against its micromamba predecessor, and none of them
+  changes a result.** The comparison is of the full conda package inventory — every
+  `conda-meta/*.json`, which does not depend on which tool installed it — followed by a real
+  run wherever a package that could move an output had moved.
+
+  | Images | What differs | Evidence |
+  |---|---|---|
+  | abundance, bracken, checkamg, qc, vcontact3, viewer, vitap | `pip`, `wheel`, `setuptools` only | Build tooling; no tool reads it |
+  | vclust | build tooling only | as above |
+  | geneannot | `sqlalchemy` 2.0.51 → 2.0.52, two TLS libraries | patch release; DRAM's schema is unaffected |
+  | genomad, virsorter2 | `csvtk` 0.31.0 → 0.37.0 | all five csvtk invocations the pipeline makes, run in both images on the same tables: identical output |
+  | vibrant | `libblas`, `libcblas`, `liblapack` 3.9.0 → 3.11.0 | VIBRANT on the reference run's 161 contigs: same 89 phages, same 90 quality calls, byte-identical once sorted. Only the row order moves, and every consumer joins on the contig ID |
+  | base, replicyc | — | compared on real data earlier: CheckV's `quality_summary.tsv`, `checkv_qc_long.fasta` and the clustering byte-identical; bacphlip byte-identical, Replidec identical in every classification |
+
+  `binning` is the exception, and deliberately so: `pandas` 3.0.5 → 2.3.3, `scikit-learn`
+  1.9.0 → 1.0.2, `scipy` 1.18.0 → 1.15.2, `samtools`/`htslib` 1.24 → 1.23.1. Those are the
+  versions the lockfile pins because PHAMB's random forest was fitted under them; the
+  micromamba image had drifted forward to a set that cannot load it. Comparing output against
+  it would be comparing against the broken one — which is the whole reason for
+  [PACKAGING.md](dev/PACKAGING.md).
