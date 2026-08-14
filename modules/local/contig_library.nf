@@ -119,9 +119,16 @@ process CONTIGLIB_CLUSTER {
     path "versions.yml", emit: versions
 
     script: // This script is bundled with the pipeline, in nf-core/viroprofiler/bin/
-    def min_ani     = params.contig_cluster_min_similarity / 100
-    def min_cov     = params.contig_cluster_min_coverage / 100
-    def prefilter   = Math.max(0.0, (params.contig_cluster_min_similarity - 5) / 100)
+    // Divided as BigDecimal, not as the Float the parameter arrives as. The thresholds are
+    // percentages the user types, and a value that binary floating point cannot hold
+    // exactly reaches Vclust with a tail: 95.1 becomes 0.950999984741211 rather than 0.951.
+    // The difference does not change a cluster, but it does end up in the command line and
+    // in the provenance record. Whole and binary-exact values are unaffected either way.
+    def sim         = params.contig_cluster_min_similarity as BigDecimal
+    def cov         = params.contig_cluster_min_coverage as BigDecimal
+    def min_ani     = sim / 100
+    def min_cov     = cov / 100
+    def prefilter   = [ 0.0G, (sim - 5) / 100 ].max()
     """
     # The library pools the contigs of every sample, so a contig that more than
     # one sample assembled arrives several times over. Collapsing those exact
