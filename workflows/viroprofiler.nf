@@ -258,7 +258,9 @@ workflow VIROPROFILER {
 
             // TODO: add back after fix bug in abundance.
             // Binning (optional)
-            if ( params.binning ) {
+            // Matched against the binner names rather than tested for truth: `--binning
+            // false` reaches here as the String "false", which Groovy reads as true.
+            if ( params.binning in ['phamb', 'vrhyme'] ) {
                 if ( params.binning == "phamb" ) {
                     // PHAMB's features are counts of VOG and miComplete HMM hits, and those
                     // two HMM sets are installed by `--mode setup` only when

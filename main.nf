@@ -29,8 +29,21 @@ nextflow.enable.dsl = 2
 // BigDecimal reject it. Float is right for the `number` parameters even where the value is
 // a whole number: it leaves 95 an Integer rather than rendering it into a command as 95.0.
 //
-// The three groups mirror `"type"` in nextflow_schema.json, which is what validates them.
+// The Boolean, Integer and Float groups mirror `"type"` in nextflow_schema.json, which is
+// what validates them. `single_end` is here although the schema ignores it, precisely
+// because the schema ignores it: nothing else would catch `--single_end false`.
+//
+// `binning` and `input_contigs` need no conversion -- they are strings already -- but are
+// declared so that the type is stated where a reader looks for it. Both once defaulted to
+// the boolean `false` for "off", which is the shape that breaks: `--binning false` arrives
+// as "false", and a non-empty String is true. Their off values are now the string "false"
+// and `null`, and the workflow matches `binning` against the binner names rather than
+// testing it for truth.
 params {
+    binning:                       String
+    input_contigs:                 String
+
+    single_end:                    Boolean
     enable_conda:                  Boolean
     help:                          Boolean
     kraken2_clean:                 Boolean
