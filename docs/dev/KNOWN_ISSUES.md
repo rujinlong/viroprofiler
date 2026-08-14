@@ -60,6 +60,8 @@ usability defect · **P3** hygiene.
 | [I-49](#i-49) | P2 | Workflow — the completion summary was printed twice on every run | Fixed |
 | [I-50](#i-50) | P0 | Config — a boolean given on the command line arrived as a string, and `"false"` is true | Fixed |
 | [I-51](#i-51) | P1 | Config — `process.resourceLimits` above the `profiles` block ignores every profile | Fixed |
+| [I-52](#i-52) | P0 | Databases — `DB_VCONTACT3` cannot download: `curl` is not in the image | Fixed |
+| [I-53](#i-53) | P2 | Databases — a symlinked database that is not bind-mounted is silently re-downloaded | Open |
 
 ---
 
@@ -1318,3 +1320,67 @@ setting `process.resourceLimits` directly in the `-c` file.
 `process.resourceLimits` disagree, naming both values and the fix. It warns rather than
 fails because overriding `process.resourceLimits` in a `-c` file is the supported route and
 makes the two disagree by design.
+
+---
+
+<a id="i-52"></a>
+## I-52
+
+**`DB_VCONTACT3` cannot download: `curl` is not in the image.** P0. Fixed.
+
+`vcontact3 prepare_databases` does not fetch anything itself; it shells out to `curl`, and
+`denglab/viroprofiler-vcontact3` has neither `curl` nor `wget`. The download therefore dies
+inside vConTACT3's own downloader:
+
+```
+File ".../vcontact3/databases.py", line 103, in download_version
+    version_dl_res = utils.execute_stdout(['curl', '-s', '-o', str(dest_path), src_path])
+FileNotFoundError: [Errno 2] No such file or directory: 'curl'
+```
+
+The path had never been run. Every database on the development host was built or copied by
+hand, and `--mode setup` had only ever been exercised against a `--db` that already held one.
+
+What kept it from shipping a broken database is the process's own check, which is the shape
+[I-10](#i-10) and the verification discipline exist for. `prepare_databases` returned
+non-zero, the process said so and carried on to verify anyway, and the verification failed on
+content rather than on status:
+
+```
+prepare_databases returned non-zero; verifying the result anyway
+The vConTACT3 database in .../vcontact3_db is unusable:
+v232/RefSeq.232.0.3.mmseq_0.3_clu is not an mmseqs clustering database.
+```
+
+**Resolution.** `curl` is in `docker/viroprofiler-vcontact3/pixi.toml` and the lockfile is
+regenerated. The re-lock added `curl` and its dependency chain — `libcurl`, `krb5`,
+`libnghttp2`, `libpsl`, `libedit`, `libev`, `icu`, `keyutils` — and moved no package that was
+already pinned.
+
+---
+
+<a id="i-53"></a>
+## I-53
+
+**A symlinked database that is not bind-mounted is silently re-downloaded.** P2. Open.
+
+Every `DB_*` process skips its work when the database is already there:
+
+```
+if [ ! -d ${params.db}/checkv ]; then
+    checkv download_database ${params.db}
+    ...
+```
+
+That test runs *inside the container*. A `--db` entry that is a symlink to a path outside it
+— which is how the databases on the development host are arranged, and what
+`--container_binds` exists for — is a dangling link in there, so `-d` is false and the
+download starts. `DB_CHECKV` re-fetched 6.4 GB this way, then failed when its `mv` landed on
+the symlink that was there all along.
+
+The failure is loud, but it names the wrong thing: an `mv` collision rather than a missing
+bind. Passing `--container_binds` with the symlink targets avoids it, which is the documented
+requirement for a *run* and is just as necessary for `--mode setup`.
+
+Worth fixing by testing the path on the host side instead — a `when:` clause reading
+`file("${params.db}/checkv").exists()` — so that the guard sees what the user sees.

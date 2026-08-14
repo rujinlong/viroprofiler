@@ -35,3 +35,11 @@ diamond = "*"
 seqkit = "*"
 # merge_taxonomy.py, run by TAXONOMY_MERGE.
 click = "*"
+# `vcontact3 prepare_databases` shells out to curl, and without it DB_VCONTACT3's
+# fresh-download path dies inside vConTACT3's own downloader:
+#   FileNotFoundError: [Errno 2] No such file or directory: 'curl'
+# It then leaves a database that DB_VCONTACT3's own check rejects -- "v232/...
+# is not an mmseqs clustering database" -- rather than publishing a broken one.
+# The path had never been run: every database on the development host was built
+# or copied by hand.
+curl = "*"
