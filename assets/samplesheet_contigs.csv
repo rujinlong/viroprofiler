@@ -1,2 +1,2 @@
 sample,contigs
-contigs,${HOME}/viroprofiler/testdata/viroprofiler-test/contigs.fasta
+contigs,/path/to/contigs.fasta

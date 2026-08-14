@@ -32,9 +32,16 @@ nextflow run deng-lab/viroprofiler -profile singularity [OPTIONS]
 
 Several generic profiles are bundled with the pipeline which instruct the pipeline to use software packaged using different methods (Docker, Singularity, Podman, Shifter, Charliecloud, Conda) - see below. When using Biocontainers, most of these software packaging methods pull Docker containers from quay.io e.g [FastQC](https://quay.io/repository/biocontainers/fastqc) except for Singularity which directly downloads Singularity images via https hosted by the [Galaxy project](https://depot.galaxyproject.org/singularity/) and Conda which downloads and installs software locally from [Bioconda](https://bioconda.github.io/).
 
-> We highly recommend the use of Docker or Singularity containers for full pipeline reproducibility, however when this is not possible, Conda is also supported.
+> A container engine is required. There is a `conda` profile, but it is not a working
+> alternative: the pipeline's own processes carry no `conda` directive, so a Conda run would
+> find most of its tools missing. Use Docker, Singularity/Apptainer, Podman, Shifter or
+> Charliecloud.
 
-The pipeline also dynamically loads configurations from [https://github.com/nf-core/configs](https://github.com/nf-core/configs) when it runs, making multiple config profiles for various institutional clusters available at run time. For more information and to see if your system is available in these configs please see the [nf-core/configs documentation](https://github.com/nf-core/configs#documentation).
+nf-core's institutional configs are **not** loaded: the `includeConfig` that would fetch
+them from [nf-core/configs](https://github.com/nf-core/configs) is commented out in
+`nextflow.config`. Point at your own site config with `-c` instead — and note that a `-c`
+file setting `params.max_cpus` and friends arrives after the resource ceiling has been
+fixed, so set `process.resourceLimits` there rather than `params.max_*`.
 
 Note that multiple profiles can be loaded, for example: `-profile test,docker` - the order of arguments is important!
 They are loaded in sequence, so later profiles can overwrite earlier profiles.

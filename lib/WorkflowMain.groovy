@@ -46,6 +46,52 @@ class WorkflowMain {
     //
     // Validate parameters and print summary to screen
     //
+    //
+    // Warn when `params.max_*` and the resource ceiling actually in force disagree.
+    //
+    // `process.resourceLimits` replaced nf-core's `check_max()`, which the strict config
+    // language cannot express. The two are not evaluated at the same time: `check_max()`
+    // ran per task and read `params.max_cpus` as it finally stood, whereas the map is
+    // evaluated where it is written. nextflow.config writes it below the `profiles` block,
+    // so a profile, `-params-file` and `--max_cpus` are all picked up -- but a `-c` file is
+    // applied afterwards, and one that sets only `params.max_cpus` moves the number this
+    // pipeline prints in its parameter summary without moving the cap it submits with.
+    //
+    // Measured: `-c` setting max_cpus 7 against `-profile test_stub`, whose ceiling is 2,
+    // leaves every task at 2 while the summary says 7.
+    //
+    // This warns rather than fails: setting `process.resourceLimits` directly in a `-c` file
+    // is the supported way to raise the ceiling, and that route makes the two disagree by
+    // design. Either way the message names the value that is in force.
+    //
+    private static void resourceLimitsAgree(workflow, params, log) {
+        def limits = null
+        try {
+            limits = workflow.session.config.navigate('process.resourceLimits')
+        } catch (Exception e) {
+            return    // no config to inspect; nothing useful to say
+        }
+        if (!(limits instanceof Map)) return
+
+        def disagree = [
+            ['cpus',   params.max_cpus],
+            ['memory', params.max_memory],
+            ['time',   params.max_time],
+        ].findAll { key, want ->
+            want != null && limits[key] != null && limits[key].toString() != want.toString()
+        }
+        if (!disagree) return
+
+        log.warn "The resource ceiling in force is not the one --max_* asks for.\n" +
+            disagree.collect { key, want ->
+                "  ${key}: --max_${key} says ${want}, " +
+                "process.resourceLimits enforces ${limits[key]}"
+            }.join("\n") + "\n" +
+            "  process.resourceLimits is evaluated where it is written, so a -c file that\n" +
+            "  sets only params.max_* arrives too late. Set process.resourceLimits there\n" +
+            "  instead, or pass --max_* on the command line."
+    }
+
     public static void initialise(workflow, params, log) {
         // Print help to screen if required
         if (params.help) {
@@ -63,6 +109,9 @@ class WorkflowMain {
 
         // Check that a -profile or Nextflow config has been provided to run the pipeline
         NfcoreTemplate.checkConfigProvided(workflow, log)
+
+        // Say so when the resource ceiling the summary just printed is not the one in force
+        resourceLimitsAgree(workflow, params, log)
 
         // Check that conda channels are set-up correctly
         if (params.enable_conda) {

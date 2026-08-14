@@ -26,6 +26,18 @@ no aarch64 build:
 Anything that changes those numbers is a result change and needs explaining. Reproduce with
 the command under [Running it on this machine](#running-it-on-this-machine).
 
+The strict-syntax migration was checked against this run rather than assumed harmless: the
+same sixteen samples, from a `sbatch --export=NIL` job with `NXF_SYNTAX_PARSER` unset — the
+submission that originally exposed the dependency on the legacy parser. Every per-tool
+product came back byte-identical (`contigs_nrclib.fasta`, `taxonomy_tse.tsv`, CheckV's
+`quality_summary.tsv`), and in the TreeSummarizedExperiment all four assays match to
+`max |diff| = 0`, with `rowData` and `colData` identical.
+
+**Two runs' `.rds` files are not byte-identical even so, and that is expected.** The sample
+columns come back in whatever order the abundance tasks finished, so `colData` row order and
+assay column order vary between runs. Contig order does not. Compare two objects by aligning
+on `sample_name` first; an md5 of the `.rds` will always differ.
+
 A two-sample subset (HT02, UC20) is kept as a fast check, and is what most of the
 verification below was done on: 22 contigs, 18 of them viral. It is enough to exercise every
 process and nothing that needs more than one sample per group — no ordination, no PERMANOVA,

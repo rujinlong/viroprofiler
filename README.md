@@ -1,9 +1,9 @@
 # ViroProfiler: a containerized bioinformatics pipeline for viral metagenomic data analysis
 
-[![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A521.10.3-23aa62.svg)](https://www.nextflow.io/)
+[![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A526.04.0-23aa62.svg)](https://www.nextflow.io/)
 [![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?logo=docker)](https://www.docker.com/)
 [![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg)](https://sylabs.io/docs/)
-[![CI](https://github.com/rujinlong/viroprofiler/actions/workflows/stub_test.yml/badge.svg)](https://github.com/rujinlong/viroprofiler/actions/workflows/stub_test.yml)
+[![CI](https://github.com/deng-lab/viroprofiler/actions/workflows/stub_test.yml/badge.svg)](https://github.com/deng-lab/viroprofiler/actions/workflows/stub_test.yml)
 [![DOI](https://zenodo.org/badge/537899739.svg)](https://zenodo.org/badge/latestdoi/537899739)
 
 ```

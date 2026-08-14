@@ -46,7 +46,7 @@ sampleID3,AEG588A3_S3_L002_R1_001.fastq.gz,AEG588A3_S3_L002_R2_001.fastq.gz
 
 | Column    | Description |
 | --------- | ----------- |
-| `sample`  | Custom sample name. This entry will be identical for multiple sequencing libraries/runs from the same sample. Spaces in sample names are automatically converted to underscores (`_`). |
+| `sample`  | Custom sample name. This entry will be identical for multiple sequencing libraries/runs from the same sample. |
 | `fastq_1` | Full path to FastQ file for Illumina short reads 1. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz". |
 | `fastq_2` | Full path to FastQ file for Illumina short reads 2. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz". |
 
@@ -86,7 +86,7 @@ Note that the pipeline will create the following files in your working directory
 ```console
 work                # Directory containing the nextflow working files
 output              # Output folder (can be modified with `--outdir` parameter)
-.nextflow_log       # Log file from Nextflow
+.nextflow.log       # Log file from Nextflow
 # Other nextflow hidden files, eg. history of pipeline runs and old logs.
 ```
 
@@ -95,13 +95,15 @@ output              # Output folder (can be modified with `--outdir` parameter)
 For reproducibility, we recommend using a specific version of ViroProfiler. You can always run a specific version of ViroProfiler by specifying the version number. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since. First, go to the [deng-lab/viroprofiler releases page](https://github.com/deng-lab/viroprofiler/releases) and find the latest version number (eg. `v1.0.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r v1.0.1`. This version number will be logged in reports when you run the pipeline, so that you'll know what you used when you look back in the future. For example, to run version `v1.0.1` of the pipeline:
 
 ```bash
-nextflow run deng-lab/viroprofiler -r v1.0.1 -profile singularity
+nextflow run deng-lab/viroprofiler -r v1.0.1 -profile singularity \
+    --input samplesheet.csv --db /path/to/db
 ```
 
 If the pipeline fails, you can resume the pipeline from the last successful step by adding `-resume` to the command. For example:
 
 ```bash
-nextflow run deng-lab/viroprofiler -r v1.0.1 -profile singularity -resume
+nextflow run deng-lab/viroprofiler -r v1.0.1 -profile singularity -resume \
+    --input samplesheet.csv --db /path/to/db
 ```
 
 ### Description of pipeline options and parameters
@@ -195,8 +197,8 @@ Set the top limit for requested resources for any single job. If you are running
 
 | Parameter | Default | Description |
 | :-------- | :------ | :---------- |
-| `--max_cpus`   | 4     | Maximum number of CPUs that can be requested for any single job   |
-| `--max_memory` | 20.GB  | Maximum amount of memory that can be requested for any single job |
+| `--max_cpus`   | 16    | Maximum number of CPUs that can be requested for any single job   |
+| `--max_memory` | 128.GB | Maximum amount of memory that can be requested for any single job |
 | `--max_time`   | 120.h   | Maximum amount of time that can be requested for any single job   |
 
 ### Outputs

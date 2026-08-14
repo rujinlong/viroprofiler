@@ -40,8 +40,9 @@ nextflow run main.nf -profile apptainer --input_contigs contigs.fasta --db /path
 nextflow run main.nf -stub -profile test_stub
 ```
 
-`--db` may live anywhere: it is bind-mounted into every container by the `containerOptions`
-closure in `nextflow.config`. If entries under it are symlinks pointing elsewhere, add those
+`--db` may live anywhere: the `containerOptions` closure in `nextflow.config` bind-mounts it
+into the container for every engine that has a per-task bind option, which is all of them
+except Shifter. If entries under it are symlinks pointing elsewhere, add those
 targets with `--container_binds a,b,c` — Nextflow runs Apptainer with `--no-home`, so nothing
 outside the work directory is visible unless bound.
 

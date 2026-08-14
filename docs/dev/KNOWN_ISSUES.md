@@ -1295,3 +1295,15 @@ process runs at the unrestricted defaults.
 reporting scopes that are placed there for the same reason. Verified per profile with
 `nextflow config -flat`, and end to end: `process_high` requests 12 cpus, 72.GB and 16.h,
 and under `-profile test_stub` no task received more than 2 cpus, 4 GB and 1h.
+
+**What that placement still cannot reach.** A `-c` file is applied after the project
+config, so one that sets only `params.max_cpus` moves the number the parameter summary
+prints without moving the cap. Measured: `-c` with `max_cpus = 7` against `-profile
+test_stub`, whose ceiling is 2, leaves every task at 2 while the summary says 7. The
+routes that do work are a profile, `-params-file`, `--max_cpus` on the command line, and
+setting `process.resourceLimits` directly in the `-c` file.
+
+`WorkflowMain.resourceLimitsAgree()` warns at startup when `params.max_*` and the effective
+`process.resourceLimits` disagree, naming both values and the fix. It warns rather than
+fails because overriding `process.resourceLimits` in a `-c` file is the supported route and
+makes the two disagree by design.

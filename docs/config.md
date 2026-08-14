@@ -78,7 +78,7 @@ process {
         memory = "40 GB"
     }
 
-    withName: MAPPING2CONTIGS {
+    withName: MAPPING2CONTIGS2 {
         cpus = 2
         memory = "60 GB"
     }

@@ -34,7 +34,8 @@ and aarch64 is supported. **Requires Nextflow 26.04 or newer.**
 
 - Single-end read support (`--single_end` parameter)
 - Stub test infrastructure for CI pipeline validation (51/51 processes covered)
-- GitHub Actions CI workflow with 5 stub test jobs (PE reads, SE reads, contig annotation, DB setup, optional modules)
+- GitHub Actions CI workflow with 7 stub test jobs (PE reads, SE reads, contig annotation,
+  DB setup, optional modules, PHAMB binning, the `--mode` ladder)
 - Stub blocks for all 12 database setup processes in `setup_db.nf`
 - Stub test data files (`tests/data/`)
 - `test_stub` profile for lightweight pipeline topology testing without databases or containers
@@ -44,10 +45,11 @@ and aarch64 is supported. **Requires Nextflow 26.04 or newer.**
 - DeepVirFinder, `--use_dvf`, `--dvf_qvalue`, `--dvf_maxlen`, `docker/viroprofiler-dvf/`
   and `bin/calc_qvalue.r`. It had no release since 2020 and no linux-aarch64 build in any
   version (theano 1.0.3 / keras 2.2.4)
-- `--binning phamb`, which now exits with an error. PHAMB's random forest reads
-  DeepVirFinder's per-contig score table directly and was trained on it; geNomad's scores
-  are not a drop-in substitute, and feeding the forest a stand-in would change which bins
-  are called viral without saying so. `--binning vrhyme` is unaffected
+- `--binning phamb` on aarch64, which is refused before any process is submitted: PHAMB
+  bins VAMB's clusters and VAMB has no linux-aarch64 build. On amd64 it still runs, but
+  its calls are approximate -- the random forest was fitted on DeepVirFinder's per-contig
+  scores and `PHAMB_DVF_TABLE` gives it geNomad's in the same layout, which share a range
+  but not a calibration. `--binning vrhyme` carries no such caveat
 
 ### Changed
 

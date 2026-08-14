@@ -36,7 +36,7 @@
                 "db": {
                     "type": "string",
                     "description": "Directory of ViroProfiler database",
-                    "default": "~/.nextflow/assets/deng-lab/viroprofiler/db",
+                    "default": "$HOME/viroprofiler",
                     "fa_icon": "fas fa-database"
                 },
                 "container_binds": {
@@ -113,7 +113,7 @@
                 "assemblies": {
                     "type": "string",
                     "description": "Use contigs or scaffolds from assembler output",
-                    "default": "contigs",
+                    "default": "scaffolds",
                     "enum": [
                         "contigs",
                         "scaffolds"
@@ -191,7 +191,8 @@
                         "false",
                         "phamb",
                         "vrhyme"
-                    ]
+                    ],
+                    "default": "false"
                 },
                 "binning_minlen_contig": {
                     "type": "integer",
@@ -325,7 +326,7 @@
                 "use_iphop": {
                     "type": "boolean",
                     "description": "Use iPhOP for phage host prediction",
-                    "default": false
+                    "default": true
                 },
                 "use_decontam": {
                     "type": "boolean",
@@ -345,7 +346,7 @@
                 "use_dram": {
                     "type": "boolean",
                     "description": "Use DRAM for metabolic reconstruction",
-                    "default": false
+                    "default": true
                 },
                 "use_checkamg": {
                     "type": "boolean",
@@ -431,7 +432,7 @@
                 "max_cpus": {
                     "type": "integer",
                     "description": "Maximum number of CPUs that can be requested for any single job.",
-                    "default": 60,
+                    "default": 16,
                     "fa_icon": "fas fa-microchip",
                     "hidden": true,
                     "help_text": "Use to set an upper-limit for the CPU requirement for each process. Should be an integer e.g. `--max_cpus 1`"
@@ -439,7 +440,7 @@
                 "max_memory": {
                     "type": "string",
                     "description": "Maximum amount of memory that can be requested for any single job.",
-                    "default": "400.GB",
+                    "default": "128.GB",
                     "fa_icon": "fas fa-memory",
                     "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$",
                     "hidden": true,
@@ -448,7 +449,7 @@
                 "max_time": {
                     "type": "string",
                     "description": "Maximum amount of time that can be requested for any single job.",
-                    "default": "100.h",
+                    "default": "120.h",
                     "fa_icon": "far fa-clock",
                     "pattern": "^(\\d+\\.?\\s*(s|m|h|day)\\s*)+$",
                     "hidden": true,
