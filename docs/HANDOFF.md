@@ -5,6 +5,22 @@ Companion documents: [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md) (every defect found,
 [ARM64.md](dev/ARM64.md) (what can and cannot be built for aarch64),
 [PACKAGING.md](dev/PACKAGING.md) (how the images declare and freeze their dependencies).
 
+## Start here
+
+The pipeline is at 1.0.1 and works. It parses under the default parser of Nextflow 26.04, the
+sixteen-sample reference run reproduces to `max |diff| = 0`, and every database path has been
+built at least once. Nothing is pushed: `dev_ru` and vpfkit's `dev` are both local.
+
+**One push blocks everyone else.** vpfkit `dev` is a single commit on top of
+`deng-lab/vpfkit`'s `main`, ready to fast-forward, and
+`docker/viroprofiler-viewer/Dockerfile` pins it by SHA. Until it lands, GitHub has never seen
+that commit, so the viewer image cannot be built — by anyone, including CI — and item 2 under
+[Not done yet](#not-done-yet) cannot start either. Items 3 onwards are independent of it.
+
+Before changing anything, run the four fast checks under
+[Testing what you change](#testing-what-you-change): they take seconds, need no database, and
+are what caught most of what is recorded here.
+
 ## Where the pipeline stands
 
 The pipeline runs end to end and produces a TreeSummarizedExperiment. The reference run is
@@ -43,12 +59,10 @@ verification below was done on: 22 contigs, 18 of them viral. It is enough to ex
 process and nothing that needs more than one sample per group — no ordination, no PERMANOVA,
 no group comparison of any kind. Use the sixteen-sample set for anything statistical.
 
-This is 1.0.1, the first release since the published version. Everything is committed on
-`dev_ru` and **not pushed**, so that it can be squash-merged into `main`. The same is true of
-[vpfkit](#the-r-side-vpfkit-and-the-viewer) 0.6.0 on its `dev` branch, where `R CMD check` is
-clean and 1107 tests pass. The vpfkit push gates the other: `VPFKIT_REF` now names a commit
-that exists nowhere but the local checkout, so the viewer image cannot be built until it is
-pushed.
+This is 1.0.1, the first release since the published version;
+[vpfkit](#the-r-side-vpfkit-and-the-viewer) 0.6.0 is its R side, with `R CMD check` clean and
+1107 tests passing. `dev_ru` is left unsquashed so that it can be squash-merged into `main`;
+vpfkit's `dev` is already one commit. Neither is pushed — see [Start here](#start-here).
 
 ## Pipeline shape
 
@@ -162,11 +176,20 @@ Databases live at `/mnt/scratch/db/viroprofiler`:
 The `taxonomy/` tree there — the MMseqs2 vRefSeq database and the 2022 NCBI taxdump, 3.4 GB —
 has no consumer any more and can be deleted.
 
-SIFs live in two directories on this host. `~/singularity/viroprofiler-pixi/` holds the
-current, pixi-built set and is what `--sif_dir` above points at;
-`~/singularity/viroprofiler/` holds the previous micromamba-built set, kept as a fallback
-while the new images are still new. `viroprofiler-taxa.sif` in the older directory is a
-leftover of the retired vConTACT2 image and can be deleted.
+SIFs live in five directories, and which one you want depends on where the job runs:
+
+| Directory | What it holds |
+|---|---|
+| `~/singularity/viroprofiler-pixi/` | The current pixi-built set. **spark1 only** — `~/singularity` is node-local |
+| `~/singularity/viroprofiler/` | The previous micromamba set, kept as a fallback. `viroprofiler-taxa.sif` there is a leftover of the retired vConTACT2 image and can be deleted |
+| `/mnt/nas26/singularity/viroprofiler-pixi/` | The same current set on shared storage. **This is what a Slurm job must point `--sif_dir` at** |
+| `/mnt/nas26/singularity/viroprofiler-localtest/` | Only `viroprofiler-viewer.sif`, built from the local vpfkit tree. The reference runs overlay it on the set above |
+| `/mnt/nas26/singularity/viroprofiler-curltest/` | Only `viroprofiler-vcontact3.sif`, rebuilt with `curl` ([I-52](dev/KNOWN_ISSUES.md#i-52)) |
+
+The last one is the one to remember: **the vConTACT3 image in every other directory still
+lacks `curl`**, so `--mode setup` cannot build that database with it. The manifest and lock
+are fixed in the repository; folding the rebuilt image into the main set, or publishing it,
+is part of item 2 under [Not done yet](#not-done-yet).
 
 `bash docker/build_arm64.sh <name>` rebuilds one image; `SIF_DIR=<path>` chooses where the
 SIFs go, and defaults to `~/singularity/viroprofiler`. Once the pixi images have been used
@@ -238,6 +261,7 @@ The reference objects to open are
 | [`/mnt/nas26/testdata/viroprofiler_16sample/run_final/results/viroprofiler_output.rds`](file:///mnt/nas26/testdata/viroprofiler_16sample/run_final/results/) | Everything. 16 samples, two groups, DRAM-v and CheckAMG annotations. |
 | `.../viroprofiler_output_all_contigs.rds` | The same run before the viral subset, for checking what the vote dropped. |
 | `/home/allen/data2/testdata/viroprofiler_real_full/results/viroprofiler_output.rds` | The two-sample object, for the degraded paths: no groups, no gene annotations, legacy `tmm` assay name. |
+| `.../viroprofiler_16sample/run_nf2/` and `run_nf2_head/` | The two strict-syntax regression runs, kept as the evidence behind the claim above. `run_nf2` is the migration commit, `run_nf2_head` is `dev_ru` tip. Both match `run_final` exactly once sample order is aligned. |
 
 ## Testing what you change
 
@@ -361,15 +385,19 @@ checkout, and it is amd64-only in any case. Reasoning and per-image notes:
 
 Ordered by how much they change results.
 
-1. **Push vpfkit.** This is the one manual step everything else waits on.
-   `docker/viroprofiler-viewer/Dockerfile` now pins `VPFKIT_REF` to vpfkit 0.6.0
-   (`59862a03cf103f1e16e6ea2cd959a3553e4ad287`), the rewrite that exports
-   `annotate_viral_votes`, but that commit exists only in the local checkout — so the viewer
-   image cannot be built by anyone, including CI, until it is pushed. `VPFKIT_REPO` is a
-   build argument defaulting to `deng-lab/vpfkit`; while the commit lives only on the fork,
-   build with `VPFKIT_REPO=rujinlong/vpfkit bash docker/build_arm64.sh viewer`. The
-   sixteen-sample reference runs were produced with an image built from the local working
-   tree, which is a verification artefact, not something anyone else can reproduce.
+1. **Push vpfkit.** The one manual step everything else waits on.
+   `~/github/rujinlong/vpfkit` branch `dev` is a single commit,
+   `efa71660aa548c53ca0277bdc69d91e02dc8f982`, on top of `deng-lab/vpfkit`'s `main` — a
+   fast-forward, nothing to resolve. `docker/viroprofiler-viewer/Dockerfile` pins that SHA,
+   so re-squashing or amending means updating `VPFKIT_REF` in the same change.
+
+   `VPFKIT_REPO` is a build argument defaulting to `deng-lab/vpfkit`. While the commit lives
+   only on a fork, build with
+   `VPFKIT_REPO=rujinlong/vpfkit bash docker/build_arm64.sh viewer`.
+
+   The sixteen-sample reference runs used an image built from the local working tree
+   (`denglab/viroprofiler-viewer:localtest`), which is a verification artefact, not something
+   anyone else can reproduce.
 2. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
    local SIFs — `vcontact3`, `vclust`, `vitap`, `genomad`, `checkamg` were never published,
    and every other image now differs in content from the tag it names — so every profile other

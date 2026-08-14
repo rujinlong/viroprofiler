@@ -17,7 +17,7 @@ LABEL author="Jinlong Ru"
 # built; see docs/HANDOFF.md. Point VPFKIT_REPO at whichever fork carries it:
 #   docker build --build-arg VPFKIT_REPO=rujinlong/vpfkit ...
 ARG VPFKIT_REPO=deng-lab/vpfkit
-ARG VPFKIT_REF=59862a03cf103f1e16e6ea2cd959a3553e4ad287
+ARG VPFKIT_REF=efa71660aa548c53ca0277bdc69d91e02dc8f982
 LABEL org.opencontainers.image.revision="${VPFKIT_REF}"
 LABEL org.opencontainers.image.source="https://github.com/${VPFKIT_REPO}"
 
