@@ -31,10 +31,12 @@ verification below was done on: 22 contigs, 18 of them viral. It is enough to ex
 process and nothing that needs more than one sample per group — no ordination, no PERMANOVA,
 no group comparison of any kind. Use the sixteen-sample set for anything statistical.
 
-Everything is committed on `dev_ru` and **not pushed**, so that it can be squash-merged into
-`main`. The same is true of [vpfkit](#the-r-side-vpfkit-and-the-viewer) on its `dev` branch,
-where `R CMD check` is clean and 1106 tests pass. Neither push has happened, and one of them
-gates the other: the viewer image installs vpfkit from GitHub at a pinned commit.
+This is 1.0.1, the first release since the published version. Everything is committed on
+`dev_ru` and **not pushed**, so that it can be squash-merged into `main`. The same is true of
+[vpfkit](#the-r-side-vpfkit-and-the-viewer) 0.6.0 on its `dev` branch, where `R CMD check` is
+clean and 1106 tests pass. The vpfkit push gates the other: `VPFKIT_REF` now names a commit
+that exists nowhere but the local checkout, so the viewer image cannot be built until it is
+pushed.
 
 ## Pipeline shape
 
@@ -101,8 +103,6 @@ The published `denglab/*` images are amd64-only, so this aarch64 host uses local
 through the `arm64_local` profile:
 
 ```bash
-export NXF_SYNTAX_PARSER=v1
-
 nextflow run main.nf \
   -profile apptainer,arm64_local -resume \
   --sif_dir ~/singularity/viroprofiler-pixi \
@@ -116,12 +116,11 @@ nextflow run main.nf \
 
 Four things about that command are not obvious:
 
-- **`NXF_SYNTAX_PARSER=v1` is mandatory, not tuning.** Nextflow 25.x made a restricted config
-  language the default, and this pipeline is not written in it: the run dies at startup with
-  a parse error pointing at a config line rather than at the cause. It is easy to miss
-  because an interactive shell may already export it — which is why this went unnoticed until
-  a `sbatch --export=NIL` job stripped it. [I-45](dev/KNOWN_ISSUES.md#i-45) lists what has to
-  move and why config and scripts have to migrate together.
+- **Nextflow 26.04 or newer, and `NXF_SYNTAX_PARSER` unset.** The pipeline is written in the
+  strict language that release makes the default; `manifest.nextflowVersion` enforces it.
+  Setting the variable to `v1` now breaks the run rather than fixing it, because the legacy
+  parser rejects `env()` in the params block. [I-45](dev/KNOWN_ISSUES.md#i-45) records what
+  moved.
 - **`--container_binds` is required here, not optional.** Nextflow invokes Apptainer with
   `--no-home`, so nothing outside the work directory is visible unless it is bound. Several
   entries under `--db` are symlinks into `~/data2/db` and `/mnt/nas26/db`, and the geNomad
@@ -230,9 +229,12 @@ The reference objects to open are
 
 ## Testing what you change
 
-Four checks, cheapest first. The first three take seconds and need no database.
+Five checks, cheapest first. The first four take seconds and need no database.
 
 ```bash
+# 0. Syntax. The authority on what the strict parser accepts, and it reads lib/ too.
+nextflow lint -o concise -project-dir . .
+
 # 1. Topology. Every process runs as a no-op; proves the graph still wires up.
 nextflow run main.nf -stub -profile test_stub
 
@@ -242,6 +244,10 @@ for m in fastqc fastp contiglib all; do nextflow run main.nf -stub -profile test
 # 3. Lockfiles match their manifests. --dry-run is required: plain --check rewrites
 #    pixi.lock while exiting non-zero, absorbing the drift it just reported.
 for m in docker/*/pixi.toml; do pixi lock --check --dry-run --manifest-path "$m"; done
+
+# 3b. The docs site. --strict turns a broken cross-reference into a failure.
+#     pixi global install mkdocs --with mkdocs-material --with mkdocs-git-revision-date-plugin
+mkdocs build --strict
 
 # 4. Real data, once the above are green. Numbers to match are in the first section.
 #    --binning phamb cannot be reached here; see the arch guard.
@@ -269,10 +275,15 @@ NOT_CRAN=true CHROMOTE_CHROME=/snap/bin/chromium Rscript dev/verify_app_headless
 passes without testing anything in two different ways — the dataset has to be *loaded*, not
 merely chosen, and Shiny suspends outputs on inactive tabs — and its header says so.
 
-Three things none of these can tell you, so check by hand:
+Four things none of these can tell you, so check by hand:
 
 - **Whether a changed output still has the columns its consumers read.** The stub passes
   either way; see the second rule below.
+- **What a name inside a closure resolves to at run time.** `nextflow lint` type-checks
+  declarations, not closure bodies: it passed a completion handler in which `params` was
+  null, and it passes a `params { }` declaration whose types have drifted from
+  `nextflow_schema.json`. Both fail at run time, one of them silently — see
+  [I-50](dev/KNOWN_ISSUES.md#i-50).
 - **Whether a resource change took effect.** `nextflow.config` requesting 4 CPUs proves
   nothing; `grep -c 'vclust.* -t 4' work/*/*/.command.sh` does.
 - **Whether the viewer image contains the vpfkit you just changed.** It installs from GitHub
@@ -338,24 +349,23 @@ checkout, and it is amd64-only in any case. Reasoning and per-image notes:
 
 Ordered by how much they change results.
 
-1. **Push vpfkit and bump `VPFKIT_REF`.** `docker/viroprofiler-viewer/Dockerfile` installs
-   vpfkit from GitHub at a pinned commit, and the commit it names predates the rewrite. Until
-   both happen, a rebuilt viewer image carries the old package and `RESULTS_TSE` will fail on
-   `annotate_viral_votes` not being exported — after every upstream process has finished. The
-   sixteen-sample reference run above was produced with an image built from the local
-   working tree (`denglab/viroprofiler-viewer:localtest`), which is a verification artefact,
-   not something anyone else can reproduce.
-2. **Migrate to the Nextflow v2 config and script language** — [I-45](dev/KNOWN_ISSUES.md#i-45).
-   Every run today depends on `NXF_SYNTAX_PARSER=v1` being exported. This has to be one
-   change covering config and scripts together, and it moves `manifest.nextflowVersion`.
-3. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
+1. **Push vpfkit.** This is the one manual step everything else waits on.
+   `docker/viroprofiler-viewer/Dockerfile` now pins `VPFKIT_REF` to vpfkit 0.6.0
+   (`59862a03cf103f1e16e6ea2cd959a3553e4ad287`), the rewrite that exports
+   `annotate_viral_votes`, but that commit exists only in the local checkout — so the viewer
+   image cannot be built by anyone, including CI, until it is pushed. `VPFKIT_REPO` is a
+   build argument defaulting to `deng-lab/vpfkit`; while the commit lives only on the fork,
+   build with `VPFKIT_REPO=rujinlong/vpfkit bash docker/build_arm64.sh viewer`. The
+   sixteen-sample reference runs were produced with an image built from the local working
+   tree, which is a verification artefact, not something anyone else can reproduce.
+2. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
    local SIFs — `vcontact3`, `vclust`, `vitap`, `genomad`, `checkamg` were never published,
    and every other image now differs in content from the tag it names — so every profile other
    than `arm64_local` is currently broken. This is the last step before anyone else can run
    the pipeline. Bump the tags rather than overwriting: an image built from a lockfile and one
    built from a loose environment file are not the same artifact, and reusing `v0.2`/`v0.3`
    would leave existing installations silently on the old one.
-4. **Run on amd64.** Nothing here has been built or run on x86-64, and two paths have no
+3. **Run on amd64.** Nothing here has been built or run on x86-64, and two paths have no
    aarch64 execution route at all, so that run is their first real test:
    - `--binning phamb`, end to end. Watch VAMB in particular: the depth table is built in
      FASTA order by name lookup because `--jgi` pairs depths to contigs positionally, and the
@@ -363,19 +373,19 @@ Ordered by how much they change results.
      shuffled abundances. Then check that `run_RF.py` resolves to `/usr/local/bin/run_RF.py`
      and that `vambbins_RF_predictions.txt` is non-empty.
    - `--use_iphop`, which is forced off in the arm64 profile.
-5. **Restore the `.github/workflows/docker.yml` build matrix.** Every entry is still
+4. **Restore the `.github/workflows/docker.yml` build matrix.** Every entry is still
    commented out, so no image is built by CI on either architecture. The lockfile gate that
    should accompany it (`check_locks`) is already in place; what is missing is the build and
    push itself, which is the same work as item 1.
-6. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
+5. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
    process reads it — everything that runs VirSorter2 carries the `viroprofiler_virsorter2`
    label and gets its own image — and it is worth about 1 GB. It was left in place so that the
    pixi migration changed packaging and nothing else.
-7. **Give the viewer something to say about iPHoP.** Host prediction is the one annotation
+6. **Give the viewer something to say about iPHoP.** Host prediction is the one annotation
    family with no real data behind it anywhere in this stack: iPHoP has no aarch64 build, so
    its `RESULTS_TSE` slot has only ever carried a placeholder and `read_iphop()` has only
    been checked against a fixture. The first amd64 run is where both get tested.
-8. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md), including the committed
+7. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md), including the committed
    `output_stub*` directories and the literal `${HOME}` in `assets/samplesheet_contigs.csv`.
 
 On the vpfkit side, ordered the same way:

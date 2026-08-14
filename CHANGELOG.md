@@ -3,7 +3,13 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## v1.0.1 - 2026-08-14
+
+The first release since the published version, and a large one: geNomad replaces
+DeepVirFinder, Vclust replaces the all-vs-all BLAST recipe, VITAP and vConTACT3 supply
+taxonomy, CheckAMG calls auxiliary genes, the output is a TreeSummarizedExperiment built by
+[vpfkit](https://github.com/deng-lab/vpfkit), the images install from committed lockfiles,
+and aarch64 is supported. **Requires Nextflow 26.04 or newer.**
 
 ### Added
 
@@ -43,8 +49,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are not a drop-in substitute, and feeding the forest a stand-in would change which bins
   are called viral without saying so. `--binning vrhyme` is unaffected
 
+### Changed
+
+- The config and the workflow scripts are written in Nextflow's strict language, which
+  26.04 makes the default parser. Runs no longer need `NXF_SYNTAX_PARSER=v1`, and must not
+  set it: the legacy parser rejects `env()` in the params block
+- `check_max()` is replaced by the built-in `process.resourceLimits`
+- `main.nf` declares the types of the 34 non-string parameters, which is what makes
+  `--use_dram false` a boolean again rather than the string `"false"`
+
 ### Fixed
 
+- A boolean passed on the command line arrived as a string under the strict parser, and
+  Groovy reads `"false"` as true, so `--use_dram false` would have run DRAM-v. Schema
+  validation rejected the run first, which is the only reason it was loud rather than silent
+- The completion summary was printed twice on every run: a file-scope `workflow.onComplete`
+  handler in each of the two workflow files, both registered because `main.nf` includes both
 - ABRICATE stub output: `printf` format specifier error with `%COVERAGE`/`%IDENTITY` column headers
 - `.gitignore`: bare `data` pattern was ignoring `tests/data/` directory
 - Missing `single_end` and `dvf_maxlen` parameter definitions in `nextflow.config`

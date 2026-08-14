@@ -50,7 +50,8 @@ sampleID3,AEG588A3_S3_L002_R1_001.fastq.gz,AEG588A3_S3_L002_R2_001.fastq.gz
 | `fastq_1` | Full path to FastQ file for Illumina short reads 1. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz". |
 | `fastq_2` | Full path to FastQ file for Illumina short reads 2. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz". |
 
-An [example samplesheet](../assets/samplesheet.csv) has been provided with the pipeline.
+An [example samplesheet](https://github.com/deng-lab/viroprofiler/blob/main/assets/samplesheet.csv)
+has been provided with the pipeline, under `assets/`.
 
 Use the `--input` parameter to specify its location, or set `input` in the [params.yml](https://github.com/deng-lab/viroprofiler/blob/main/params.yml) file.
 
@@ -91,16 +92,16 @@ output              # Output folder (can be modified with `--outdir` parameter)
 
 ### Reproducible data analysis
 
-For reproducibility, we recommend using a specific version of ViroProfiler. You can always run a specific version of ViroProfiler by specifying the version number. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since. First, go to the [deng-lab/viroprofiler releases page](https://github.com/deng-lab/viroprofiler/releases) and find the latest version number (eg. `v0.2`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r v0.2`. This version number will be logged in reports when you run the pipeline, so that you'll know what you used when you look back in the future. For example, to run version `v0.2` of the pipeline:
+For reproducibility, we recommend using a specific version of ViroProfiler. You can always run a specific version of ViroProfiler by specifying the version number. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since. First, go to the [deng-lab/viroprofiler releases page](https://github.com/deng-lab/viroprofiler/releases) and find the latest version number (eg. `v1.0.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r v1.0.1`. This version number will be logged in reports when you run the pipeline, so that you'll know what you used when you look back in the future. For example, to run version `v1.0.1` of the pipeline:
 
 ```bash
-nextflow run deng-lab/viroprofiler -r v0.2 -profile singularity
+nextflow run deng-lab/viroprofiler -r v1.0.1 -profile singularity
 ```
 
 If the pipeline fails, you can resume the pipeline from the last successful step by adding `-resume` to the command. For example:
 
 ```bash
-nextflow run deng-lab/viroprofiler -r v0.2 -profile singularity -resume
+nextflow run deng-lab/viroprofiler -r v1.0.1 -profile singularity -resume
 ```
 
 ### Description of pipeline options and parameters

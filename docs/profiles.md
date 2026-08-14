@@ -23,7 +23,7 @@ If you are using `singularity` and are persistently observing issues downloading
 
 !!! tip ""
 
-    This is exemplified in the [installation page](installation.md#downloading-docker-images)
+    This is exemplified in the [installation page](installation.md#getting-the-pipeline)
 
 ```bash
 # run

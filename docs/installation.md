@@ -1,72 +1,50 @@
 # Installation
 
-## Dependencies
+## Requirements
 
-The pipeline require only a UNIX system, [Nextflow](https://www.nextflow.io/docs/latest/index.html#) and either [Docker](https://www.docker.com/) or [Singularity](https://sylabs.io/docs/). Please, for installing these tools refer to their manual.
+- A UNIX system. Windows users can run the pipeline under [WSL](https://docs.microsoft.com/windows/wsl/install).
+- [Nextflow](https://www.nextflow.io/) **26.04 or newer**. The pipeline is written in
+  Nextflow's strict language, which that release makes the default parser, and
+  `manifest.nextflowVersion` refuses to start on anything older. Do not set
+  `NXF_SYNTAX_PARSER`.
+- A container engine: Docker, Singularity/Apptainer, Podman, Shifter or Charliecloud.
+- Disk for the databases. A full setup is roughly 100 GB, most of it DRAM and VIBRANT.
 
-## Downloading the pipeline
-
-You can easily get a copy of the pipeline or update with:
-
-```bash
-# download or update to the latest version
-nextflow pull deng-lab/viroprofiler
-
-# download a specific version (ex. 1.0)
-nextflow pull deng-lab/viroprofiler -r v1.0
-
-# download a specific branch (ex. dev)
-nextflow pull deng-lab/viroprofiler -r dev
-```
-
-!!! warning
-    
-    The pipeline requires a UNIX system, therefore, Windows users may successfully use this pipeline via the [Linux subsystem for window](https://docs.microsoft.com/pt-br/windows/wsl/install-win10). Nextflow team has made available a [nice tutorial](https://www.nextflow.io/blog.html) about this issue.
-
-## Downloading docker images
-
-The docker images used by the pipeline are:
+## Getting the pipeline
 
 ```bash
-docker pull denglab/viroprofiler-base        ;
-docker pull denglab/viroprofiler-binning     ;
-docker pull denglab/viroprofiler-abundance   ;
-docker pull denglab/viroprofiler-geneannot   ;
-docker pull denglab/viroprofiler-vibrant     ;
-docker pull denglab/viroprofiler-vcontact3   ;
-docker pull denglab/viroprofiler-host        ;
-docker pull denglab/viroprofiler-replicyc    ;
+nextflow pull deng-lab/viroprofiler              # latest
+nextflow pull deng-lab/viroprofiler -r v1.0.1    # a specific release
 ```
 
-!!! info "Using singularity"
+Container images are pulled on demand; there is nothing to download by hand. If you use
+Singularity or Apptainer, point `NXF_SINGULARITY_LIBRARYDIR` at a writable directory so the
+converted images are reused between runs.
 
-    Docker and singularity images are downloaded on the fly. Be sure to properly set `NXF_SINGULARITY_LIBRARYDIR` env variable to a writable directory if using Singularity. This will make that the downloaded images are resuable through different executions. Read more at: https://www.nextflow.io/docs/latest/singularity.html#singularity-docker-hub
+On aarch64 (Apple silicon, AWS Graviton, NVIDIA GB10) the published images do not apply —
+they are amd64 only. See [ARM64.md](dev/ARM64.md) for what can be built locally and what
+cannot.
 
-    For example, to download the images for singularity you may:
+## Building the databases
 
-    ```bash
-    # apply this command to each image
-    # just change the "/" and ":" to "-".
-    # ex. Image denglab/viroprofiler-base becomes denglab-viroprofiler-base.img
-    singularity pull --dir $NXF_SINGULARITY_LIBRARYDIR denglab-viroprofiler-base.img docker://denglab/viroprofiler-base:latest
-    singularity pull --dir $NXF_SINGULARITY_LIBRARYDIR denglab-viroprofiler-binning.img docker://denglab/viroprofiler-binning:latest
-    singularity pull --dir $NXF_SINGULARITY_LIBRARYDIR denglab-viroprofiler-abundance.img docker://denglab/viroprofiler-abundance:latest
-    singularity pull --dir $NXF_SINGULARITY_LIBRARYDIR denglab-viroprofiler-geneannot.img docker://denglab/viroprofiler-geneannot:latest
-    singularity pull --dir $NXF_SINGULARITY_LIBRARYDIR denglab-viroprofiler-vibrant.img docker://denglab/viroprofiler-vibrant:latest
-    singularity pull --dir $NXF_SINGULARITY_LIBRARYDIR denglab-viroprofiler-vcontact3.img docker://denglab/viroprofiler-vcontact3:latest
-    singularity pull --dir $NXF_SINGULARITY_LIBRARYDIR denglab-viroprofiler-host.img docker://denglab/viroprofiler-host:latest
-    singularity pull --dir $NXF_SINGULARITY_LIBRARYDIR denglab-viroprofiler-replicyc.img docker://denglab/viroprofiler-replicyc:latest
-    ```
+Required once per installation, and the longest part of setting up:
 
-## Testing your installation
+```bash
+nextflow run deng-lab/viroprofiler -profile docker --mode setup --db /path/to/db
+```
 
-After that, you can run the pipeline with a testing dataset by selecting one of the available profiles: 
+Every later run takes the same `--db`. If entries under it are symlinks pointing elsewhere,
+add those targets with `--container_binds a,b,c` — Nextflow runs the container without your
+home directory mounted, so nothing outside the work directory is visible unless it is bound.
 
-1. Docker
-    * `nextflow run denglab/viroprofiler -profile docker,test`
-2. Singularity
-    * `nextflow run denglab/viroprofiler -profile singularity,test`
+## Checking the installation
 
-!!! note "About NF profiles"
+```bash
+# Seconds, no databases: runs every process as a no-op and proves the graph wires up.
+nextflow run deng-lab/viroprofiler -stub -profile test_stub
 
-    Please read more about how to [proper select NF profiles](profiles.md#) to better understand it.
+# The bundled test dataset, end to end.
+nextflow run deng-lab/viroprofiler -profile docker,test --db /path/to/db
+```
+
+See [Profiles](profiles.md) for choosing a container engine and an execution environment.

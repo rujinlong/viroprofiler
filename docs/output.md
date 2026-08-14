@@ -38,18 +38,18 @@ output
 
 The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes data using the following steps:
 
-1. Reads QC ([`FastQC`](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/))
-2. Dereplication
+1. Reads QC ([`FastQC`](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/), [`fastp`](https://github.com/OpenGene/fastp))
+2. Assembly ([`metaSPAdes`](https://github.com/ablab/spades))
 3. Contig quality evaluation and provirus detection ([`CheckV`](https://bitbucket.org/berkeleylab/checkv))
-4. Contig clustering based on ANI
-5. Binning (optional, using PHAMB or vRhyme)
-6. Abundance estimation
-7. Viral sequence identification (VirSorter2, VIBRANT, DeepVirfinder)
-8. Functional annotation
-9. Taxonomy assignment
-10. Viral-host prediction
-11. Viral replication cycle prediction
-12. Merged output
+4. Dereplication of the whole contig library at species level ([`Vclust`](https://github.com/refresh-bio/vclust))
+5. Binning (optional, using vRhyme or PHAMB)
+6. Abundance estimation ([`CoverM`](https://github.com/wwood/CoverM))
+7. Viral sequence identification (geNomad, CheckV quality and optionally VIBRANT; VirSorter2 runs afterwards to prepare the table DRAM-v needs)
+8. Auxiliary gene calling ([`CheckAMG`](https://github.com/AnantharamanLab/CheckAMG)) and functional annotation ([`DRAM-v`](https://github.com/WrightonLabCSU/DRAM))
+9. Taxonomy assignment ([`VITAP`](https://github.com/DrKaiyangZheng/VITAP), [`vConTACT3`](https://bitbucket.org/MAVERICLab/vcontact3))
+10. Viral-host prediction ([`iPHoP`](https://bitbucket.org/srouxjgi/iphop))
+11. Viral replication cycle prediction (BACPHLIP or Replidec)
+12. A TreeSummarizedExperiment gathering all of the above, built by [`vpfkit`](https://github.com/deng-lab/vpfkit)
 13. Aggregate report describing results and QC from the whole pipeline ([`MultiQC`](http://multiqc.info/))
 14. [Pipeline information](#pipeline-information) - Report metrics generated during the workflow execution
 

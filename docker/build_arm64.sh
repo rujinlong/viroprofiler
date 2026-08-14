@@ -18,12 +18,20 @@
 #   bash docker/build_arm64.sh                 # build everything, write SIFs to the default dir
 #   SIF_DIR=/path bash docker/build_arm64.sh   # choose where the SIFs go
 #   bash docker/build_arm64.sh base qc         # build only the named images
+#   VPFKIT_REPO=rujinlong/vpfkit bash docker/build_arm64.sh viewer   # vpfkit from a fork
 #
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAG="${TAG:-v0.3}"
 SIF_DIR="${SIF_DIR:-$HOME/singularity/viroprofiler}"
+
+# The viewer installs vpfkit from GitHub. The Dockerfile pins the commit; this only
+# chooses which repository it is fetched from, for the case where the pinned commit has
+# been pushed to a fork but not yet to deng-lab.
+VPFKIT_REPO="${VPFKIT_REPO:-}"
+BUILD_ARGS=()
+[[ -n "$VPFKIT_REPO" ]] && BUILD_ARGS+=(--build-arg "VPFKIT_REPO=${VPFKIT_REPO}")
 
 ALL_IMAGES=(base qc abundance replicyc vibrant bracken virsorter2 vcontact3 vclust vitap genomad checkamg geneannot binning viewer)
 IMAGES=("${@:-}")
@@ -42,7 +50,8 @@ for img in "${IMAGES[@]}"; do
     fi
 
     echo "BUILD ${img}"
-    if ! docker build -f "$dockerfile" -t "denglab/viroprofiler-${img}:${TAG}" . ; then
+    if ! docker build "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}" \
+             -f "$dockerfile" -t "denglab/viroprofiler-${img}:${TAG}" . ; then
         echo "FAIL  ${img}: docker build"
         status=1
         continue

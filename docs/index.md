@@ -11,6 +11,8 @@ The pipeline's main steps are:
 | Pipeline modules | Used software or databases |
 | :------------- | :------------------------- |
 | Genome assembly | [metaSPAdes](https://github.com/ablab/spades) |
+| Contig library dereplication | [Vclust](https://github.com/refresh-bio/vclust), at the MIUViG species thresholds |
+| Abundance estimation | [CoverM](https://github.com/wwood/CoverM) |
 | Binning | [vRhyme](https://github.com/AnantharamanLab/vRhyme) |
 | Viral contig identification | [geNomad](https://github.com/apcamargo/genomad), [CheckV](https://bitbucket.org/berkeleylab/checkv/src/master/) and [VIBRANT](https://github.com/AnantharamanLab/VIBRANT); [VirSorter2](https://github.com/jiarong/VirSorter2) then prepares the affi-contigs table DRAM-v needs |
 | Auxiliary gene (AMG/AReG/APG) calling | [CheckAMG](https://github.com/AnantharamanLab/CheckAMG) |
@@ -18,7 +20,13 @@ The pipeline's main steps are:
 | Viral replication cycle prediction |  [BACPHLIP](https://github.com/adamhockenberry/bacphlip) or [Replidec](https://github.com/deng-lab/Replidec) |
 | Viral taxonomy annotation | [VITAP](https://github.com/DrKaiyangZheng/VITAP) and [vConTACT3](https://bitbucket.org/MAVERICLab/vcontact3) |
 | Viral-host prediction | [iPHoP](https://bitbucket.org/srouxjgi/iphop) |
-| Results visualization | [MultiQC](https://multiqc.info/), [R Markdown](https://rmarkdown.rstudio.com/) and [Shiny](https://shiny.rstudio.com/) |
+| Results object and visualization | [vpfkit](https://github.com/deng-lab/vpfkit) assembles a [TreeSummarizedExperiment](https://bioconductor.org/packages/TreeSummarizedExperiment/) and provides the Shiny viewer and the Quarto report; [MultiQC](https://multiqc.info/) summarises the run |
+
+The pipeline's headline output is that TreeSummarizedExperiment: one object carrying the
+abundance assays, every per-contig annotation and the sample metadata, ready for analysis in
+R. Pass `--sample_metadata` or its `colData` will hold nothing but the sample names.
+
+Requires **Nextflow 26.04 or newer** — see [Installation](installation.md).
 
 !!! note "Tutorial"
 

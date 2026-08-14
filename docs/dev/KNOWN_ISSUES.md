@@ -53,10 +53,13 @@ usability defect · **P3** hygiene.
 | [I-42](#i-42) | P0 | Containers — conda post-link scripts are not run by pixi, leaving a data package uninstalled | Fixed |
 | [I-43](#i-43) | P0 | Containers — the VAMB version pinned has no `--jgi`, the flag the process passes | Fixed |
 | [I-44](#i-44) | P1 | Modules — VAMB's `--jgi` pairs depths to contigs by row, not by name | Fixed |
-| [I-45](#i-45) | P0 | Config — the pipeline does not parse under Nextflow's default config parser | Open |
+| [I-45](#i-45) | P0 | Config — the pipeline does not parse under Nextflow's default config parser | Fixed |
 | [I-46](#i-46) | P1 | Modules — iPHoP, CheckAMG and DRAM-v results never reached `RESULTS_TSE` | Fixed |
 | [I-47](#i-47) | P2 | Config — 432 lines of iGenomes reference config that nothing reads | Fixed |
 | [I-48](#i-48) | P1 | Config — a scheduler's `TMPDIR` points outside the container, and DRAM-v dies on it | Fixed |
+| [I-49](#i-49) | P2 | Workflow — the completion summary was printed twice on every run | Fixed |
+| [I-50](#i-50) | P0 | Config — a boolean given on the command line arrived as a string, and `"false"` is true | Fixed |
+| [I-51](#i-51) | P1 | Config — `process.resourceLimits` above the `profiles` block ignores every profile | Fixed |
 
 ---
 
@@ -1082,7 +1085,7 @@ checked against a pinned SHA-256 rather than trusted because its URL carries a c
 
 ## I-45
 
-**Config — the pipeline does not parse under Nextflow's default config parser.** P0. Open.
+**Config — the pipeline does not parse under Nextflow's default config parser.** P0. Fixed.
 
 Nextflow 25.x made a new, restricted config language the default. `nextflow.config` is not
 written in it, and a run dies before the first process with a message that points at a line
@@ -1118,13 +1121,31 @@ scripts have to migrate together, in one change, and the pipeline then requires 
 enough to have the v2 parser. `manifest.nextflowVersion` would move from `>=22.04.0`
 accordingly.
 
-**Interim.** Runs must set `NXF_SYNTAX_PARSER=v1` explicitly rather than rely on inheriting it.
+**Resolution.** Config and scripts migrated together, and `manifest.nextflowVersion` is now
+`>=26.04.0`. `NXF_SYNTAX_PARSER` must not be set at all.
 
-**Notes for whoever does the migration.** The report file names are the one piece with no
-obvious v2 spelling: the `timeline`/`report`/`trace`/`dag` scopes resolve `params` and nothing
-else — not a local variable, not `workflow`, not a `lib/` class — so `execution_trace_${trace_timestamp}.txt`
-cannot be expressed. The workable substitute is a `params.trace_tag` defaulting to empty, with
-the timestamp supplied on the command line when several runs share an `--outdir`.
+- `check_max()` and its 137 call sites are gone, replaced by `process.resourceLimits`.
+  Moving the helper into `lib/` was tried first and does not work: a config closure resolves
+  `Utils` to a `ConfigObject`, so the call fails with `No signature of method:
+  groovy.util.ConfigObject.checkMax()`. The assignment sits below the `profiles` block —
+  see [I-51](#i-51) for what happens when it does not.
+- The `switch` is an if/else chain. `def` and `if` inside a config closure remain legal.
+- The report file names use `params.trace_timestamp`, assigned by `nextflow.config` itself
+  from `new java.util.Date().format(...)`. The earlier note here — that the timestamp would
+  have to come from the command line — was wrong: an arbitrary expression is a legal
+  assignment value, and `params` is what carries it into the four reporting scopes. It is in
+  `schema_ignore_params`, being an implementation detail rather than an option.
+- `"${HOME}"` is `"${env('HOME')}"`, which is what makes the legacy parser unusable.
+- Statements at file scope moved into the workflow bodies, `for` became `.each`, and the
+  `no_file` closure became a function — the strict parser resolves `no_file(...)` as a
+  function name.
+
+Two further defects surfaced during the migration and have their own entries: the completion
+summary was being printed twice ([I-49](#i-49)), and command-line booleans stopped being
+coerced ([I-50](#i-50)).
+
+Verified with the default parser: `nextflow lint` reports no errors where it reported 54, and
+all five CI stub jobs, the four-mode ladder and both negative tests pass.
 
 ---
 
@@ -1200,3 +1221,77 @@ It does not reproduce interactively, where `TMPDIR` is `/tmp` and Apptainer prov
 process. The task directory is bound by definition and lives on the work filesystem, which
 is where large scratch files belong. Verified by checking that the export reaches all 26
 task scripts in a stub run, rather than by assuming a directive took effect.
+
+---
+
+<a id="i-49"></a>
+## I-49
+
+**The completion summary was printed twice on every run.** P2. Fixed.
+
+`workflows/viroprofiler.nf` and `workflows/contig_anno.nf` each ended in a file-scope
+`workflow.onComplete { ... NfcoreTemplate.summary(...) }`. `main.nf` includes both entry
+workflows and invokes one of them, but a module's file-scope statements run at *include*
+time, not at invocation — so both handlers were registered and both fired. Every run
+printed the completion summary twice, and with `--email` set would have tried to send two
+e-mails.
+
+Confirmed in isolation: two modules, one file-scope handler each, only one workflow
+invoked, both handlers ran.
+
+**Resolution.** There is one handler, in `main.nf`'s entry workflow, and it is registered
+once. See [I-45](#i-45) for why it is an `onComplete:` section rather than a closure.
+
+---
+
+<a id="i-50"></a>
+## I-50
+
+**A boolean given on the command line arrived as a string, and `"false"` is true.** P0. Fixed.
+
+Under the strict parser Nextflow no longer infers a parameter's type from its default, so
+`--use_dram false` reaches the pipeline as the String `"false"`. Groovy treats any non-empty
+string as true, so `if (params.use_dram)` is true and DRAM-v runs when the user asked for it
+not to. The same applies to all 19 boolean, 7 integer and 8 number parameters —
+`--max_cpus 4` arrives as `"4"`.
+
+What made this survivable is accidental: JSON-schema validation rejects the run with
+`expected type: Boolean, found: String (false)` before the workflow starts. Switch
+`validate_params` off and the inversion is silent.
+
+**Resolution.** `main.nf` declares the types of all 34 non-string parameters in a `params { }`
+block, which is where the strict language expects a parameter's type; values stay in
+`nextflow.config`, which still overrides the declaration, and a profile and then the command
+line override that in turn. Only `Boolean`, `Integer` and `Float` convert a command-line
+string — `Number`, `Double` and `BigDecimal` reject it outright. `Float` is the right choice
+for the schema's `number` parameters even where the value is a whole number: it leaves 95 an
+`Integer` rather than rendering it into a tool's command line as `95.0`.
+
+The declaration mirrors `"type"` in `nextflow_schema.json`. A new non-string parameter has
+to be added to both.
+
+Verified: `--use_dram false` now leaves DRAMV out of the run rather than failing validation.
+
+---
+
+<a id="i-51"></a>
+## I-51
+
+**`process.resourceLimits` above the `profiles` block ignores every profile.** P1. Fixed.
+
+`resourceLimits` replaced `check_max()` ([I-45](#i-45)), but the two are not evaluated at the
+same time. `check_max()` ran inside a per-task closure and read `params.max_cpus` at
+submission; `resourceLimits` is a plain map, evaluated where it is written. Written in
+`conf/base.config` — the natural home, next to the resource defaults — it freezes to the
+values in the `params` block of `nextflow.config`, because that file is included before
+`profiles` is applied.
+
+The effect is silent and specific: `--max_cpus` on the command line still works, because
+command-line parameters are resolved before the config is, but `test` (2 cpus, 6.GB),
+`test_stub` (2 cpus, 4.GB) and `custom.config` (4 cpus, 20.GB) are all ignored, and every
+process runs at the unrestricted defaults.
+
+**Resolution.** The assignment lives in `nextflow.config` below `profiles`, next to the
+reporting scopes that are placed there for the same reason. Verified per profile with
+`nextflow config -flat`, and end to end: `process_high` requests 12 cpus, 72.GB and 16.h,
+and under `-profile test_stub` no task received more than 2 cpus, 4 GB and 1h.

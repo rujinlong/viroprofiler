@@ -11,8 +11,15 @@ LABEL author="Jinlong Ru"
 
 # vpfkit is pinned to a commit SHA, not `main`: on `main` a rebuild could change
 # what create_tse.r calls without any file in this repository changing.
-ARG VPFKIT_REF=78acfaf30133bc634983ced1ceb45e134d2e9aba
+#
+# This commit is vpfkit 0.6.0, the rewrite that RESULTS_TSE needs -- it is what
+# exports annotate_viral_votes(). It has to be pushed before this image can be
+# built; see docs/HANDOFF.md. Point VPFKIT_REPO at whichever fork carries it:
+#   docker build --build-arg VPFKIT_REPO=rujinlong/vpfkit ...
+ARG VPFKIT_REPO=deng-lab/vpfkit
+ARG VPFKIT_REF=59862a03cf103f1e16e6ea2cd959a3553e4ad287
 LABEL org.opencontainers.image.revision="${VPFKIT_REF}"
+LABEL org.opencontainers.image.source="https://github.com/${VPFKIT_REPO}"
 
 WORKDIR /app
 
@@ -45,7 +52,7 @@ RUN found="$(ls /app/.pixi/envs/default/bin/.*-post-link.sh 2>/dev/null | \
         echo "Unhandled post-link script(s); pixi does not run these:"; echo "$found"; exit 1; \
     fi
 
-RUN R -e "remotes::install_github('deng-lab/vpfkit', ref = '${VPFKIT_REF}', upgrade = 'never', dependencies = FALSE)" && \
+RUN R -e "remotes::install_github('${VPFKIT_REPO}', ref = '${VPFKIT_REF}', upgrade = 'never', dependencies = FALSE)" && \
     R -e "library(vpfkit)"
 
 # Smoke test in a stripped environment, because that is how `.command.sh` runs.

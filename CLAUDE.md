@@ -21,20 +21,10 @@ A Nextflow DSL2 pipeline for viral metagenomic data analysis. It takes raw reads
 
 ## Running the Pipeline
 
-**`NXF_SYNTAX_PARSER=v1` is required.** Nextflow 25.x made a restricted config language the
-default, and neither `nextflow.config` nor the workflow scripts are written in it — a run
-fails at startup with a config parse error that points at a line rather than at the cause.
-Export it, or every run dies before the first process:
-
-```bash
-export NXF_SYNTAX_PARSER=v1
-```
-
-It is easy to miss because an interactive shell may already have it set, so the failure first
-appears in a batch job or on someone else's machine. Migrating to the v2 language is a single
-change touching config and scripts together — see [I-45](docs/dev/KNOWN_ISSUES.md#i-45) for
-the four config constructs and the two script constructs that have to move, and why it cannot
-be split into steps.
+**Nextflow 26.04 or newer.** The config and the workflow scripts are written in Nextflow's
+strict language, which that release makes the default parser. `manifest.nextflowVersion`
+enforces it. Do not set `NXF_SYNTAX_PARSER`: the legacy parser rejects `env()` in the params
+block, and the two parsers cannot both be satisfied.
 
 ```bash
 # Database setup (required on a new installation)
@@ -108,7 +98,7 @@ INPUT_CHECK (samplesheet CSV)
 Loaded in this order; a later file wins, which is why `conf/modules.config` is included
 *before* `profiles` — otherwise no profile could override a container image.
 
-1. `nextflow.config` — params, profiles, per-process resources, `check_max()`
+1. `nextflow.config` — params, profiles, per-process resources, `process.resourceLimits`
 2. `conf/base.config` — default resource labels (`process_low`, `process_medium`, `process_high`)
 3. `conf/modules.config` — container image per `withLabel`, and the publishDir pattern
 4. `profiles` — including `test`, `test_stub`, `arm64_local` (`conf/arm64_local.config`)
@@ -188,6 +178,18 @@ They are not style preferences.
   ends with a smoke test that exercises the tools under `env -i` with the image's own PATH —
   the environment `.command.sh` actually runs in. A smoke test that searches a different PATH
   than the image exports proves nothing about the image.
+- **A new parameter needs a type in `main.nf`, or its command-line value is a string.** The
+  strict parser does no type detection: `--use_dram false` arrives as `"false"`, which Groovy
+  reads as true, so the module runs when the user asked for it not to. Add non-string
+  parameters to the `params { }` declaration block, matching `"type"` in
+  `nextflow_schema.json`. Only `Boolean`, `Integer` and `Float` convert a command-line
+  string; `Number`, `Double` and `BigDecimal` reject it. Values stay in `nextflow.config`.
+- **`process.resourceLimits` must stay below the `profiles` block.** It is evaluated where it
+  is written, not per task, so moving it into `conf/base.config` would freeze it to the
+  defaults and silently ignore the lower ceilings `test`, `test_stub` and `custom.config` set.
+- **`nextflow lint` does not check what a closure resolves to.** It reported no error on a
+  `workflow.onComplete { }` handler in which `params` was null at run time. Completion
+  handlers belong in the entry workflow's `onComplete:` section.
 - **Treat a subagent or Codex finding as a lead, not a fact.** Verify against the code first.
 
 Current state, open work and what has *not* been verified: [docs/HANDOFF.md](docs/HANDOFF.md).
