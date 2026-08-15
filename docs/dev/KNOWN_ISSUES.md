@@ -1546,6 +1546,28 @@ Three lessons this repository already knew, all of which applied here:
 - **When an upstream layout change breaks one consumer, look for the others.** I-30 found the
   cause and fixed one call site. The grep for the other one is cheap and was never done.
 
+### Where the same shape still is
+
+Auditing every `DB_*` process after this, by whether it checks the *content* of what it
+produced rather than by which idiom it uses:
+
+| Verifies its output | Does not |
+|---|---|
+| `DB_GENOMAD`, `DB_CHECKAMG`, `DB_DRAM`, `DB_VIBRANT`, `DB_VCONTACT3`, `DB_VITAP`, `DB_VOGDB`, `DB_MICOMPLETEDB` | `DB_CHECKV`, `DB_VIRSORTER2`, `DB_IPHOP`, `DB_EGGNOG`, `DB_KRAKEN2` |
+
+Of the five, three — `DB_IPHOP`, `DB_EGGNOG`, `DB_KRAKEN2` — also download straight into
+`--db` rather than into the task work directory, so a failure leaves exactly the residue that
+makes the next run skip.
+
+**`DB_IPHOP` is in the same position VOGDB was**: no content check, writes directly to `--db`,
+and has never been executed, because iPHoP has no aarch64 build. Whatever state it is in, the
+evidence for it being correct is the same evidence VOGDB had. Treat its first real run as a
+first test, not a formality.
+
+`DB_CHECKV` and `DB_VIRSORTER2` are lower risk only because they have run many times here and
+their outputs are in use; that is evidence about these particular downloads, not about the
+processes. `DB_EGGNOG` and `DB_KRAKEN2` serve modules that are off by default.
+
 ---
 
 <a id="i-57"></a>
