@@ -1,0 +1,141 @@
+name: PHAMB real run
+
+# The PHAMB binning path has never been executed. VAMB has no linux-aarch64 build,
+# so it cannot be run on the development machine at all, and the only x86-64 host on
+# that network has 7 GB of RAM. This runner is the machine that can.
+#
+# It is not a regression test in the usual sense -- it answers an open question
+# (docs/HANDOFF.md, "Not done yet"): whether VAMB, which trains a VAE, can work on a
+# library of 161 contigs. A documented lower bound is a legitimate outcome. Treat a
+# failure here as information about the dataset until the log says otherwise.
+#
+# Manual by default, plus the files that would invalidate the answer.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "subworkflows/local/vMAG.nf"
+      - "modules/local/binning.nf"
+      - "tests/phamb_entry.nf"
+      - "assets/test_phamb/**"
+      - "docker/viroprofiler-binning/**"
+      - ".github/workflows/phamb.yml"
+
+jobs:
+  phamb:
+    name: VAMB + PHAMB_RF on the reference fixture
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      # VOGDB peaks at ~9.5 GB while it is being built: a 554 MB archive, 49116
+      # unpacked profiles, and the 4.4 GB concatenation of them. Add two images on
+      # top and a default runner does not fit it.
+      - name: Reclaim disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          version: ">=26.04.0"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Tagged exactly as conf/modules.config names them, so Nextflow finds these
+      # locally and never pulls. That matters: the v0.2 tags on Docker Hub predate
+      # the pixi migration and are NOT what this repository builds today.
+      - name: Build viroprofiler-base
+        uses: docker/build-push-action@v6
+        with:
+          context: "."
+          file: ./docker/viroprofiler-base/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: denglab/viroprofiler-base:v0.2
+          cache-from: type=gha,scope=viroprofiler-base
+          cache-to: type=gha,mode=max,scope=viroprofiler-base
+
+      - name: Build viroprofiler-binning
+        uses: docker/build-push-action@v6
+        with:
+          context: "."
+          file: ./docker/viroprofiler-binning/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: denglab/viroprofiler-binning:v0.2
+          cache-from: type=gha,scope=viroprofiler-binning
+          cache-to: type=gha,mode=max,scope=viroprofiler-binning
+
+      # Through the real DB_* processes, not a shell script: both were broken until
+      # recently (I-56) in ways their own content checks now catch, so building them
+      # here is what keeps that fixed.
+      - name: Build the two HMM databases PHAMB needs
+        run: |
+          nextflow run tests/phamb_entry.nf \
+            -profile docker \
+            --phamb_stage databases \
+            --mode setup \
+            --db "$PWD/phamb_db" \
+            --max_cpus 4 --max_memory 12.GB
+          echo "--- what was published ---"
+          ls -la phamb_db/vogdb phamb_db/micomplete
+          echo "vogdb profiles:      $(grep -c '^HMMER3/' phamb_db/vogdb/AllVOG.hmm)"
+          echo "micomplete profiles: $(grep -c '^HMMER3/' phamb_db/micomplete/Bact105.hmm)"
+          df -h /
+
+      - name: Run the PHAMB path
+        run: |
+          nextflow run tests/phamb_entry.nf \
+            -profile docker \
+            --db "$PWD/phamb_db" \
+            --outdir "$PWD/phamb_out" \
+            --phamb_contigs assets/test_phamb/putative_vcontigs.fasta \
+            --phamb_genomad assets/test_phamb/genomad_virus_summary.tsv \
+            --phamb_bams 'assets/test_phamb/bams/*.bam' \
+            --max_cpus 4 --max_memory 12.GB
+
+      # The two checks docs/HANDOFF.md names for the first amd64 run, plus the
+      # cluster table they depend on. Non-empty is asserted rather than existence:
+      # run_RF.py writes the header regardless, so a file with one line means the
+      # forest classified nothing.
+      - name: Check what came out
+        run: |
+          set -x
+          find phamb_out -type f | sort
+
+          test -s phamb_out/vamb/clusters.tsv
+          echo "VAMB clusters: $(wc -l < phamb_out/vamb/clusters.tsv)"
+
+          PRED=phamb_out/phamb/vambbins_RF_predictions.txt
+          test -s "$PRED"
+          rows=$(( $(wc -l < "$PRED") - 1 ))
+          echo "RF predictions: $rows bins classified"
+          head -5 "$PRED"
+          if [ "$rows" -lt 1 ]; then
+              echo "::error::run_RF.py wrote only a header -- no bin was classified." >&2
+              echo "If VAMB produced clusters, this is a PHAMB failure. If it did not," >&2
+              echo "the library is likely below the size VAMB can work at, which is the" >&2
+              echo "open question this job exists to answer. Check the VAMB log first." >&2
+              exit 1
+          fi
+
+      - name: Keep the logs whatever happened
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phamb-run
+          path: |
+            phamb_out/
+            .nextflow.log
+          retention-days: 14
+          if-no-files-found: warn
