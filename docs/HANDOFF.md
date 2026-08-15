@@ -345,7 +345,25 @@ mkdocs build --strict
 # 4. Real data, once the above are green. Numbers to match are in the first section.
 #    --binning phamb cannot be reached here; see the arch guard.
 nextflow run main.nf -profile apptainer,arm64_local ...    # full command above
+
+# 5. The PHAMB path, which none of the above reaches. x86-64 only: VAMB has no
+#    linux-aarch64 build, so on this machine it gets as far as pulling the image.
+nextflow run tests/phamb_entry.nf -profile docker --phamb_stage databases \
+    --mode setup --db "$PWD/phamb_db"
+nextflow run tests/phamb_entry.nf -profile docker --db "$PWD/phamb_db" \
+    --outdir phamb_out \
+    --phamb_contigs assets/test_phamb/putative_vcontigs.fasta \
+    --phamb_genomad assets/test_phamb/genomad_virus_summary.tsv \
+    --phamb_bams   'assets/test_phamb/bams/*.bam'
 ```
+
+`tests/phamb_entry.nf` exists because `vMAG_PHAMB` is reachable only from inside
+`VIROPROFILER` and `CONTIGANNO` has no binning path, so there was no way to run it without
+assembling first. Its two stages are selected with `--phamb_stage`, **not** `-entry`: the
+strict parser rejects that option outright — *"the `-entry` option is not supported with the
+strict parser -- use a param to run a named workflow from the entry workflow"* — which is also
+why the pipeline itself selects stages with `--mode`. The fixture and the two properties of it
+that are deliberate are described in [`assets/test_phamb/README.md`](../assets/test_phamb/README.md).
 
 [`.github/workflows/stub_test.yml`](../.github/workflows/stub_test.yml) runs 1 and 2 on every
 push, plus the SE, contig-annotation, setup and optional-module variants, plus the PHAMB path

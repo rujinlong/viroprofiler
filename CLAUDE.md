@@ -196,6 +196,16 @@ They are not style preferences.
 - **`nextflow lint` does not check what a closure resolves to.** It reported no error on a
   `workflow.onComplete { }` handler in which `params` was null at run time. Completion
   handlers belong in the entry workflow's `onComplete:` section.
+- **`-entry` does not exist under the strict parser.** It fails with "use a param to run a
+  named workflow from the entry workflow", which is why the pipeline selects stages with
+  `--mode` and `tests/phamb_entry.nf` with `--phamb_stage`. A workflow reachable only by
+  `-entry` is a workflow nothing can run.
+- **`NXF_SYNTAX_PARSER=v1` in the environment breaks every local check, and says nothing
+  about why.** The first error is `Unknown execution scope 'onComplete:'`, which reads as a
+  syntax error in `main.nf`. A shell can inherit the variable without any profile setting it,
+  so when every local run fails identically while CI is green, check
+  `echo "${NXF_SYNTAX_PARSER:-<unset>}"` before the code, and prefix with
+  `env -u NXF_SYNTAX_PARSER` if it cannot be unset.
 - **Treat a subagent or Codex finding as a lead, not a fact.** Verify against the code first.
 
 Current state, open work and what has *not* been verified: [docs/HANDOFF.md](docs/HANDOFF.md).
