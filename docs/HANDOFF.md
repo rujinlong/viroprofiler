@@ -481,10 +481,45 @@ On the vpfkit side, ordered the same way:
 
 1. **Decide what `create_vpftse_vir()` should mean.** It keeps a contig if *any* detector
    calls it, which makes the viral set a union of five tools' sensitivities rather than a
-   consensus. `rowData$viral_vote_n` now records how many agreed, and on the reference run
-   fifteen contigs rest on a single vote. `rule = "candidate"` is implemented as an
-   alternative — it uses the pipeline's own candidate list — but the default is unchanged
-   because switching it changes every existing user's output.
+   consensus. `rule = "candidate"` is implemented as an alternative, using the pipeline's own
+   candidate list. Measured on the sixteen-sample reference run (161 contigs, before the viral
+   subset):
+
+   | | |
+   |---|---|
+   | Union (`rule = "vote"`, the default) | 100 contigs |
+   | Pipeline candidate list (`rule = "candidate"`) | 102 contigs |
+   | In the union but not a candidate | **0** |
+   | A candidate but not in the union | 2 |
+   | Resting on exactly one vote | 10 — seven on `taxonomy`, three on `vibrant`, none on any other |
+
+   So the union is a strict subset of the candidate list, and switching the rule adds two
+   contigs. That is a far smaller change than "it changes every existing user's output"
+   suggests, and it should be re-measured on a second dataset before being treated as general.
+
+   The stronger argument against the default is that the votes are not independent evidence,
+   and the run says so numerically. Pairwise Jaccard between the four votes that carry the
+   decision:
+
+   | | taxonomy | virsorter2 | vibrant | genomad | checkv |
+   |---|---|---|---|---|---|
+   | **taxonomy** | 1.00 | 0.80 | 0.81 | 0.79 | 0.11 |
+   | **virsorter2** | 0.80 | 1.00 | 0.87 | 0.85 | 0.09 |
+   | **vibrant** | 0.81 | 0.87 | 1.00 | 0.86 | 0.10 |
+   | **genomad** | 0.79 | 0.85 | 0.86 | 1.00 | 0.10 |
+   | **checkv** | 0.11 | 0.09 | 0.10 | 0.10 | 1.00 |
+
+   Those four overlap at 0.79–0.87 because they are not four opinions about a contig: geNomad,
+   CheckV and VIBRANT decide the candidate set, VirSorter2 only ever runs on that set, and the
+   merged taxonomy is computed from it. `viral_vote_n = 4` therefore counts views of one
+   decision, not four confirmations of it, and reporting it as agreement overstates the
+   evidence. CheckV is the one near-orthogonal column (0.09–0.11) and claims only 10 contigs —
+   consistent with it grading assembly completeness rather than viral identity, which is what
+   its own documentation says it does.
+
+   Reproduce with `Rscript dev/analyse_viral_votes.R` in vpfkit. It needs an
+   `*_all_contigs.rds` object: the viral subset has already dropped every contig the union
+   rejected, so the same script against the final object can only ever report unanimity.
 2. **`rpb2bpb()` assumes 150 bp reads.** Measured against the reference run the true mean
    aligned length is about 125 bp, so it overstates depth by roughly 20 %. The function is
    also a worse estimate of something CoverM already computes exactly as `trimmed_mean`;
