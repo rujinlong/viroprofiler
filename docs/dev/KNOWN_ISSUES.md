@@ -63,7 +63,7 @@ usability defect · **P3** hygiene.
 | [I-52](#i-52) | P0 | Databases — `DB_VCONTACT3` cannot download: `curl` is not in the image | Fixed |
 | [I-53](#i-53) | P2 | Databases — a symlinked database that is not bind-mounted is silently re-downloaded | Open |
 | [I-54](#i-54) | P1 | CI — `docker.yml` was invalid YAML, so the lockfile gate never ran once | Fixed |
-| [I-55](#i-55) | P2 | Modules — two of `ABUNDANCE`'s six CoverM passes feed nothing | Open |
+| [I-55](#i-55) | P2 | Modules — two of `ABUNDANCE`'s six CoverM passes feed no downstream process | Closed — kept as published side products, by decision |
 | [I-56](#i-56) | P0 | Databases — neither PHAMB database could be built, and the guard hid both | Fixed |
 | [I-57](#i-57) | P1 | Config — Docker creates a missing `--db` as root, so setup cannot write to it | Fixed |
 
@@ -1441,7 +1441,8 @@ to ask when the check last actually ran.
 <a id="i-55"></a>
 ## I-55
 
-**Two of `ABUNDANCE`'s six CoverM invocations produce nothing anyone reads.** P2. Open.
+**Two of `ABUNDANCE`'s six CoverM invocations feed no downstream process.** P2. Closed — they
+are published for users, and stay.
 
 `ABUNDANCE` runs `coverm contig` six times, once per method, each a separate pass over every
 BAM in the run:
@@ -1464,14 +1465,17 @@ depth it was estimating.
 So a third of the abundance stage re-reads every BAM to produce two files that only ever reach
 `publishDir`. That is not free: each pass is I/O-bound over the full alignment set.
 
-Deciding this needs a user, not a maintainer. Both tables are reasonable things to hand
-someone for their own analysis, and `rpkm` in particular is a normalization people ask for by
-name. The options are to keep them as documented side products, drop them, or — the only one
-that is purely a win — collapse the invocations, since `coverm contig` accepts
-`--methods count tpm trimmed_mean covered_fraction` in a single pass. That last one changes
-the output layout from one table per method to one wide table, so it is a real change to
-`RESULTS_TSE`'s inputs rather than a free optimization, and it needs the readers changed with
-it.
+**Both are kept, deliberately.** They are published for users who want to do their own
+analysis with them — `rpkm` in particular is a normalization people ask for by name — and
+"no consumer inside the pipeline" is not the same as "no consumer". The cost is understood and
+accepted; what was wrong was that nothing recorded which outputs are for `RESULTS_TSE` and
+which are for the person reading `publishDir`.
+
+The optimization that remains available, and is separate from this decision: `coverm contig`
+accepts several `--methods` in one invocation, so all six could come from one pass over the
+BAMs instead of six. It is not free to adopt — the output becomes one wide table rather than
+one table per method, which changes `RESULTS_TSE`'s inputs and needs vpfkit's readers changed
+with it — so it is worth doing when something else is already touching that interface.
 
 ---
 
@@ -1559,10 +1563,19 @@ Of the five, three — `DB_IPHOP`, `DB_EGGNOG`, `DB_KRAKEN2` — also download s
 `--db` rather than into the task work directory, so a failure leaves exactly the residue that
 makes the next run skip.
 
-**`DB_IPHOP` is in the same position VOGDB was**: no content check, writes directly to `--db`,
-and has never been executed, because iPHoP has no aarch64 build. Whatever state it is in, the
-evidence for it being correct is the same evidence VOGDB had. Treat its first real run as a
-first test, not a formality.
+**`DB_IPHOP` has been run, on an HPC cluster, and it worked** — so it is not in the position
+VOGDB was, despite looking similar here. It cannot run on this machine (iPHoP has no aarch64
+build), which is why nothing in this repository's own verification record covers it.
+
+That evidence still applies to the current code. `DB_IPHOP` was touched once during this
+modernization, by `88d9eb2`, which replaced a hardcoded `iPHoP_db_Sept21.tar.gz` with a
+`*.tar.gz` glob — the archive is deleted after a successful download, so the change affects
+cleanup and not the download. The `iphop download` call is byte-identical to the one that ran.
+
+What is *not* covered: it has no content check, so a partial download would leave a directory
+the guard then skips. It creates that directory before downloading into it, which is
+[I-57](#i-57)'s shape — though I-57 itself does not bite here, because it is specific to
+Docker creating a missing bind-mount source, and the cluster runs Apptainer.
 
 `DB_CHECKV` and `DB_VIRSORTER2` are lower risk only because they have run many times here and
 their outputs are in use; that is evidence about these particular downloads, not about the

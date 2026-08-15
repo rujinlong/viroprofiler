@@ -585,8 +585,30 @@ On the vpfkit side, ordered the same way:
    | Resting on exactly one vote | 10 — seven on `taxonomy`, three on `vibrant`, none on any other |
 
    So the union is a strict subset of the candidate list, and switching the rule adds two
-   contigs. That is a far smaller change than "it changes every existing user's output"
-   suggests, and it should be re-measured on a second dataset before being treated as general.
+   contigs — a far smaller change than "it changes every existing user's output" suggests.
+
+   **Measured again on a second dataset, and the case against the default is stronger there.**
+   p0075 (pig CRC virome, 73 samples) has a dereplicated library of 16,934 contigs, two orders
+   of magnitude past the reference run, from a different host and a different study:
+
+   | | Reference run (161 contigs) | p0075 (16,934 contigs) |
+   |---|---|---|
+   | Union, `rule = "vote"` | 100 (62 %) | **16,688 (98.5 %)** |
+   | Core detectors, pairwise Jaccard | 0.79 – 0.87 | **0.969 – 0.972** |
+   | CheckV against the core | 0.09 – 0.11 | 0.298 – 0.306 |
+   | Resting on a single vote | 10 | 302 |
+
+   On p0075 the union keeps 98.5 % of the library, which is close to not filtering at all — the
+   clearest statement yet of what "permissive union" costs. And the detectors overlap even more
+   tightly there than here, with CheckV again the one measuring something else. Both findings
+   replicate; neither is an artefact of the small reference set.
+
+   Reproduce with `Rscript dev/analyse_viral_votes_tables.R <dir>` in vpfkit, which reads the
+   per-tool tables directly so that runs of older ViroProfiler versions can be measured too.
+   **Point it at a full library, never at a viral subset.** The same script against p0075's
+   viral subset reports Jaccard 0.94 – 1.00 and no single-vote contigs, which is not a
+   result: that object has already dropped everything the union rejected, so unanimity is
+   the only answer it can give.
 
    The stronger argument against the default is that the votes are not independent evidence,
    and the run says so numerically. Pairwise Jaccard between the four votes that carry the
@@ -634,10 +656,15 @@ On the vpfkit side, ordered the same way:
 
 ## Limits of what has been verified
 
-- **Only one dataset.** Sixteen samples, 161 contigs, from one study. Cluster-level agreement
-  between the old BLAST recipe and Vclust was measured on a purpose-built 1600-sequence set
-  (99.88 % of clusters identical); pipeline behaviour on a real library of that size is still
-  what has not been seen.
+- **One dataset end to end.** Sixteen samples, 161 contigs, from one study. Cluster-level
+  agreement between the old BLAST recipe and Vclust was measured on a purpose-built
+  1600-sequence set (99.88 % of clusters identical); pipeline behaviour on a real library of
+  that size is still what has not been seen.
+
+  The exception is the viral vote, which has now been measured on a second study as well —
+  p0075, 16,934 contigs — where both findings replicate; see the vpfkit list under
+  [Not done yet](#not-done-yet). That is one analysis re-run on existing tables, not a second
+  end-to-end run, and it says nothing about the stages upstream of the vote.
 - **Vclust at 10⁵ contigs costs two minutes and 2.9 GB, and misses a little.** Measured on
   100,008 sequences totalling 907 Mbp, built from 11,112 CheckV representative genomes of
   6–30 kb, each contributing itself plus eight exact sub-fragments at 50–85 % of its length.
@@ -688,9 +715,20 @@ On the vpfkit side, ordered the same way:
 - **iPHoP and DeepVirFinder cannot run on this host at all** — see
   [ARM64.md](dev/ARM64.md) for the evidence. `use_iphop` is false in the arm64 profile, so
   host prediction is unexercised here.
-- **The iPHoP slot of `RESULTS_TSE` has never carried a real file.** iPHoP cannot run on
-  aarch64, so every run here passed the placeholder. `read_iphop()` was checked against
-  iPHoP's documented output and a fixture, not against a table this pipeline produced.
+- **The iPHoP slot of `RESULTS_TSE` has never carried a real file** — but the reader and the
+  database step have both been exercised elsewhere, so the gap is narrower than it was:
+
+  | | |
+  |---|---|
+  | `DB_IPHOP` | Run on an HPC cluster and worked. The one change since (`88d9eb2`) replaced a hardcoded archive name with a glob, and does not touch the download |
+  | `read_iphop()` | Parsed a real iPHoP `Host_prediction_to_genus_m90.csv` from p0075: 13,379 rows collapsed to 12,106 contigs, every column populated, `iphop_n_predictions` spanning 1–9. It handles the `AAI to closest RaFAH reference` spelling that file actually uses |
+  | `RESULTS_TSE` | Still only ever given the placeholder, because iPHoP has no aarch64 build |
+
+  One thing to know if a *different* iPHoP table is ever passed in: p0075's contig IDs carry
+  VirSorter2's `-cat_1` suffix, and `read_iphop()` does not strip it. That is correct for this
+  pipeline, whose iPHoP input is `VIRCONTIGS_PRE`'s output and carries no such suffix — but an
+  externally produced table might, and would then join against nothing.
+  `metadata(tse)$viroprofiler$join_match` is where that shows up.
 - **The three database paths that had never been run have now run, and one of them was
   broken.** `--mode setup` against an empty `--db` found it:
 
