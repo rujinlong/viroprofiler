@@ -156,9 +156,24 @@ Four things about that command are not obvious:
 
 - **Nextflow 26.04 or newer, and `NXF_SYNTAX_PARSER` unset.** The pipeline is written in the
   strict language that release makes the default; `manifest.nextflowVersion` enforces it.
-  Setting the variable to `v1` now breaks the run rather than fixing it, because the legacy
-  parser rejects `env()` in the params block. [I-45](dev/KNOWN_ISSUES.md#i-45) records what
-  moved.
+  Setting the variable to `v1` now breaks the run rather than fixing it.
+  [I-45](dev/KNOWN_ISSUES.md#i-45) records what moved.
+
+  **Check whether it is already set before concluding the pipeline is broken**, because the
+  error names neither the variable nor the parser:
+
+  ```
+  $ echo "${NXF_SYNTAX_PARSER:-<unset>}"           # must print <unset>
+  Unknown execution scope 'onComplete:' @ line 128, column 5.     # what v1 reports instead
+  ```
+
+  It reads as a syntax error in `main.nf` and it is not: the entry workflow's `onComplete:`
+  section is strict-syntax-only, so the legacy parser rejects a file that is correct. If it
+  is set and you cannot unset it in the shell, prefix the command with
+  `env -u NXF_SYNTAX_PARSER`. This is worth knowing about a variable that a shell can inherit
+  without any profile mentioning it — every local check under
+  [Testing what you change](#testing-what-you-change) fails identically while CI stays green,
+  which points at the code rather than the environment.
 - **`--container_binds` is required here, not optional.** Nextflow invokes Apptainer with
   `--no-home`, so nothing outside the work directory is visible unless it is bound. Several
   entries under `--db` are symlinks into `~/data2/db` and `/mnt/nas26/db`, and the geNomad

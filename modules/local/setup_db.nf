@@ -742,16 +742,53 @@ process DB_VOGDB {
 
     script:
     """
-    if [ ! -d ${params.db}/vogdb ]; then
-        mkdir -p ${params.db}/vogdb
-        cd ${params.db}/vogdb
-        wget -O vog.hmm.tar.gz "http://fileshare.csb.univie.ac.at/vog/latest/vog.hmm.tar.gz"
-        tar -zxvf vog.hmm.tar.gz
-        rm vog.hmm.tar.gz
-        cat VOG*.hmm > AllVOG.hmm
-        rm -rf VOG*
-    else
+    VOGDB="${params.db}/vogdb"
+    VERSION="${params.vogdb_version}"
+
+    # Every model in a HMMER3 library begins with a `HMMER3/` magic line, so
+    # counting them parses the file rather than trusting it. A zero-byte
+    # concatenation, a truncated download and an HTML error page all give zero;
+    # `[ -d ]` and wget's exit status distinguish none of them.
+    check_db () {
+        [ -s "\$1/AllVOG.hmm" ] || return 1
+        n=\$(grep -c '^HMMER3/' "\$1/AllVOG.hmm" 2>/dev/null) || return 1
+        [ "\${n:-0}" -ge 1000 ]
+    }
+
+    if check_db "\$VOGDB"; then
         echo "VOGDB database already exists"
+    else
+        # Build in the task work directory and publish only once verified, so a
+        # failed attempt cannot leave a directory behind that the check above
+        # would later have to tell apart from a finished one.
+        BUILD_DIR="\$PWD/vogdb_build"
+        rm -rf "\$BUILD_DIR"
+        mkdir -p "\$BUILD_DIR"
+
+        # HTTPS, and the host that the old csb.univie.ac.at name redirects to.
+        # The release is pinned because `latest` moves: two installations built
+        # months apart would otherwise hold different databases with nothing
+        # recording which.
+        wget -O "\$BUILD_DIR/vog.hmm.tar.gz" \\
+            "https://fileshare.lisc.univie.ac.at/vog/vog\${VERSION}/vog.hmm.tar.gz"
+        tar -zxf "\$BUILD_DIR/vog.hmm.tar.gz" -C "\$BUILD_DIR"
+
+        # Find the profiles wherever the archive puts them. They used to sit at
+        # its root and now sit under `hmm/`; a top-level `VOG*.hmm` glob matches
+        # nothing, which is what broke this process and, separately, DRAM (I-30).
+        find "\$BUILD_DIR" -name 'VOG*.hmm' -type f -exec cat {} + > "\$BUILD_DIR/AllVOG.hmm"
+
+        check_db "\$BUILD_DIR" || {
+            echo "VOGDB produced no readable HMM library from vog\${VERSION}." >&2
+            echo "Refusing to publish it -- an empty AllVOG.hmm would make every" >&2
+            echo "VOGDB hmmsearch return nothing without failing." >&2
+            exit 1
+        }
+
+        mkdir -p "\$VOGDB"
+        mv "\$BUILD_DIR/AllVOG.hmm" "\$VOGDB/AllVOG.hmm"
+        rm -rf "\$BUILD_DIR"
+        echo "VOGDB built from vog\${VERSION}: \$(grep -c '^HMMER3/' "\$VOGDB/AllVOG.hmm") profiles"
     fi
     """
 
@@ -771,11 +808,36 @@ process DB_MICOMPLETEDB {
 
     script:
     """
-    if [ ! -d ${params.db}/micomplete ]; then
-        mkdir -p ${params.db}/micomplete
-        wget -O ${params.db}/micomplete/Bact105.hmm "https://bitbucket.org/evolegiolab/micomplete/raw/165fea13201922f23fecb0e3c17e8e2cb07dae2d/micomplete/share/Bact105.hmm"
-    else
+    MICOMPLETE="${params.db}/micomplete"
+
+    # Bact105 is exactly what its name says: 105 bacterial marker profiles, from
+    # a pinned commit, so the count is fixed and an exact test is the strongest
+    # one available. Anything else -- a Bitbucket error page, a partial transfer
+    # -- fails it. `[ -d ]` alone would not: the directory is created before the
+    # download, so an interrupted run leaves one behind that looks finished.
+    check_db () {
+        [ -s "\$1/Bact105.hmm" ] || return 1
+        n=\$(grep -c '^HMMER3/' "\$1/Bact105.hmm" 2>/dev/null) || return 1
+        [ "\${n:-0}" -eq 105 ]
+    }
+
+    if check_db "\$MICOMPLETE"; then
         echo "Micomplete database already exists"
+    else
+        wget -O Bact105.hmm "https://bitbucket.org/evolegiolab/micomplete/raw/165fea13201922f23fecb0e3c17e8e2cb07dae2d/micomplete/share/Bact105.hmm"
+        mkdir -p micomplete_build
+        mv Bact105.hmm micomplete_build/Bact105.hmm
+
+        check_db "micomplete_build" || {
+            echo "miComplete download is not a 105-profile HMM library; refusing" >&2
+            echo "to publish it. MICOMPLETEDB would otherwise hmmsearch against" >&2
+            echo "it and return nothing without failing." >&2
+            exit 1
+        }
+
+        mkdir -p "\$MICOMPLETE"
+        mv micomplete_build/Bact105.hmm "\$MICOMPLETE/Bact105.hmm"
+        rmdir micomplete_build
     fi
     """
 

@@ -66,6 +66,7 @@ params {
 
     binning_minlen_bin:            Integer
     binning_minlen_contig:         Integer
+    vogdb_version:                 Integer
     contig_minlen:                 Integer
     contig_minlen_vcontact3:       Integer
     genomad_splits:                Integer

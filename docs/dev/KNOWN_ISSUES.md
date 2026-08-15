@@ -17,7 +17,7 @@ usability defect · **P3** hygiene.
 | [I-06](#i-06) | P1 | Databases — iPHoP DB directory name hardcoded and stale | Fixed |
 | [I-07](#i-07) | P1 | Databases — Bracken/Kraken2 DB paths disagree | Fixed |
 | [I-08](#i-08) | P2 | Databases — NCBI taxonomy pinned to a 2022 archive snapshot | Fixed — its only consumer, the MMseqs2 LCA, was retired and `DB_VREFSEQ` deleted |
-| [I-09](#i-09) | P2 | Databases — VOGDB host renamed; plain-HTTP URL | Open |
+| [I-09](#i-09) | P2 | Databases — VOGDB host renamed; plain-HTTP URL | Fixed — HTTPS, canonical host, release pinned via `--vogdb_version` |
 | [I-10](#i-10) | P2 | Databases — setup steps are not resumable and never verified | Open |
 | [I-11](#i-11) | P2 | Workflow — `--mode fastqc` / `fastp` / `contiglib` not honoured | Fixed |
 | [I-12](#i-12) | P2 | Config — `docker.userEmulation` removed in modern Nextflow | Fixed |
@@ -64,6 +64,7 @@ usability defect · **P3** hygiene.
 | [I-53](#i-53) | P2 | Databases — a symlinked database that is not bind-mounted is silently re-downloaded | Open |
 | [I-54](#i-54) | P1 | CI — `docker.yml` was invalid YAML, so the lockfile gate never ran once | Fixed |
 | [I-55](#i-55) | P2 | Modules — two of `ABUNDANCE`'s six CoverM passes feed nothing | Open |
+| [I-56](#i-56) | P0 | Databases — `DB_VOGDB` builds a 0-byte HMM library, and the guard then skips it | Fixed |
 
 ---
 
@@ -214,10 +215,18 @@ carry their own reference sets, so nothing in the pipeline reads an NCBI taxdump
 <a id="i-09"></a>
 ## I-09 — VOGDB host renamed; URL is plain HTTP (P2)
 
-`DB_VOGDB` fetches `http://fileshare.csb.univie.ac.at/vog/latest/vog.hmm.tar.gz`, which now
-redirects to `https://fileshare.lisc.univie.ac.at/vog/latest/vog.hmm.tar.gz`. It works today
-only because `wget` follows the redirect; the canonical URL should be used directly, over
-HTTPS. `latest` is also unpinned, so runs are not reproducible across time.
+`DB_VOGDB` fetched `http://fileshare.csb.univie.ac.at/vog/latest/vog.hmm.tar.gz`. Measured
+2026-08-15, that URL still resolves, through two redirects: plain HTTP to HTTPS, then
+`csb.univie.ac.at` to `fileshare.lisc.univie.ac.at`. It worked only because `wget` follows
+them. `latest` was also unpinned, so two installations built months apart got different
+databases with nothing recording which.
+
+Both are fixed: the process now requests
+`https://fileshare.lisc.univie.ac.at/vog/vog${params.vogdb_version}/vog.hmm.tar.gz` directly,
+with `vogdb_version` defaulting to 236 — the newest release at the time of writing, 554 MB
+compressed.
+
+The same download was also broken in a second, worse way; see [I-56](#i-56).
 
 The other external URLs were re-verified on 2026-08-12 and all return HTTP 200:
 Zenodo record 7044674 (`mmseqs_vrefseq.tar.gz`), the phamb `RF_model.sav` on
@@ -1462,3 +1471,56 @@ that is purely a win — collapse the invocations, since `coverm contig` accepts
 the output layout from one table per method to one wide table, so it is a real change to
 `RESULTS_TSE`'s inputs rather than a free optimization, and it needs the readers changed with
 it.
+
+---
+
+<a id="i-56"></a>
+## I-56
+
+**`DB_VOGDB` could not have succeeded since VOGDB nested its profiles, and the guard hid it.**
+P0. Fixed.
+
+[I-30](#i-30) recorded that `vog.hmm.tar.gz` moved its profiles from the archive root into
+`hmm/`, and fixed the consequence for DRAM by making `process_vogdb()`'s glob recursive. The
+same upstream change broke a second consumer that was never touched:
+
+```
+cat VOG*.hmm > AllVOG.hmm
+```
+
+With the profiles at `hmm/VOG00001.hmm`, that glob matches nothing. Reproduced under the
+pipeline's own shell (`process.shell = ['/bin/bash', '-euo', 'pipefail']`):
+
+| | |
+|---|---|
+| `cat` | `cat: 'VOG*.hmm': No such file or directory`, exit 1 |
+| Script | Fails — but `> AllVOG.hmm` already created the file |
+| Left behind | A **0-byte `AllVOG.hmm`** and the unpacked `hmm/` directory |
+
+The failure is loud the first time. The second time it is silent, because the guard was
+`[ ! -d ${params.db}/vogdb ]` and the directory now exists: the process prints "VOGDB database
+already exists" and succeeds. `VOGDB` then runs `hmmsearch` against a 0-byte library, which
+returns no hits without erroring, and PHAMB's random forest is handed an empty VOG feature
+column — it still produces bin calls, from one fewer piece of evidence than it was fitted on.
+
+Nothing caught it because `--binning phamb` has never been run: this database is only ever
+built for that path.
+
+Fixed together with [I-09](#i-09). `DB_VOGDB` now finds profiles with
+`find -name 'VOG*.hmm'` regardless of archive layout, builds into the task work directory,
+and verifies the result by counting `HMMER3/` magic lines — the header every model in a HMMER3
+library begins with, so a count is a parse: a 0-byte concatenation, a truncated download and
+an HTML error page all give zero. It publishes only above 1000 profiles (vog236 has ~49000).
+
+`DB_MICOMPLETEDB` was hardened in the same shape. It was not broken, but it created its
+target directory *before* downloading into it, so a failed transfer left a directory the
+guard would skip on the next run. It now verifies that `Bact105.hmm` contains exactly 105
+profiles — measured, and fixed by the pinned commit in its URL — before publishing.
+
+Three lessons this repository already knew, all of which applied here:
+
+- **An exit status proves nothing about a database.** The second run's status was 0.
+- **`[ -d ]` is not a completeness check** ([I-53](#i-53)). Here it did not merely fail to
+  detect a missing bind; it actively converted a hard failure into a silent one.
+- **When an upstream layout change breaks one consumer, look for the others.** I-30 found the
+  cause and fixed one call site. The grep for the other one is cheap and was never done.

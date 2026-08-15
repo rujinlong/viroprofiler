@@ -203,6 +203,11 @@
                     "type": "integer",
                     "description": "Minimum bin length",
                     "default": 5000
+                },
+                "vogdb_version": {
+                    "type": "integer",
+                    "description": "VOG release used to build the HMM library PHAMB's random forest reads. Pinned rather than 'latest' so that two installations built at different times get the same database.",
+                    "default": 236
                 }
             }
         },
