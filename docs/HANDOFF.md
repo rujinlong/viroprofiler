@@ -512,28 +512,25 @@ Ordered by how much they change results.
       `run_RF.py` writes a predictions file when run with real arguments. See
       [Limits of what has been verified](#limits-of-what-has-been-verified) for the table and
       for what those checks still do not cover.
-   2. **Can VAMB work at this scale at all?** It trains a VAE, and the reference library is
-      161 contigs. That may be below the size it can operate at, in which case the honest
-      outcome is a documented lower bound rather than a passing test.
+   2. **Can VAMB work at this scale at all?** This is the open question, and everything
+      needed to answer it is in place: [`tests/phamb_entry.nf`](../tests/phamb_entry.nf) with
+      its two stages, the 7 MB fixture in [`assets/test_phamb/`](../assets/test_phamb/), the
+      three databases the path reads, and
+      [`.github/workflows/phamb.yml`](../.github/workflows/phamb.yml) to run it on x86-64.
 
-      The inputs are ready. The fixture exists in the reference run —
-      `contigs_nrclib.fasta`, BAMs under `viroprofiler_16sample/run_dram/mapping2contigs2/`,
-      and `virus_genomad_summary.tsv` — and both HMM databases are now built
-      ([I-56](dev/KNOWN_ISSUES.md#i-56) had to be fixed first; neither had ever been built,
-      and neither could have been).
+      **The number that matters is 77, not 161.** The fixture holds the 102 putative viral
+      contigs, and `VAMB` is given `-m ${params.binning_minlen_contig}`, which is 5000 — so 77
+      sequences totalling 1.48 Mbp reach the VAE, with a median length of 8.9 kb. VAMB's
+      default batch size is 256. It was designed for libraries three or four orders of
+      magnitude larger than this, so the likely outcome is that it cannot cluster this
+      meaningfully, and **a documented lower bound is a legitimate answer** — the workflow's
+      failure message says so, to keep a red run from being read as a code defect.
 
-      Two things are left, and both are decisions rather than unknowns:
-
-      - **Where the fixture lives.** Roughly 7 MB: 2 MB of contigs plus four to six BAMs at
-        0.4–1.6 MB each. In `assets/` it is versioned with the code and git keeps it forever;
-        as a release asset it stays out of the history at the cost of a step that has to be
-        redone whenever the fixture changes.
-      - **How to reach the subworkflow.** `vMAG_PHAMB` takes three channels and is called
-        only from `VIROPROFILER`; `CONTIGANNO` has no binning path, so there is no existing
-        entry point that stops there. Either add a small `-entry` wrapper — worth having
-        because it also makes the path runnable by hand, not just in CI — or generate one
-        inside the workflow file, which keeps the repository unchanged but hides the wiring
-        in YAML.
+      Two failures had to be cleared before the path could even start, both invisible until
+      it was actually run: [I-56](dev/KNOWN_ISSUES.md#i-56), where neither HMM database could
+      be built and the guard turned both failures silent, and
+      [I-57](dev/KNOWN_ISSUES.md#i-57), where Docker created a missing `--db` as root and
+      nothing could then write to it.
 
    A CI job is the right home for this even though it is not really a regression test: it is
    the only x86-64 machine available, it has 16 GB against the NAS's 7, and `--binning phamb`
