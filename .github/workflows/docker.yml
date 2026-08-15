@@ -48,14 +48,63 @@ jobs:
           exit $status
 
 
-# The image build and push job lived here and has been removed: its `matrix.include` was
-# entirely commented out, which YAML reads as `include: null`. GitHub rejects an empty
-# matrix, and it rejects it at parse time -- so the whole file was invalid, `check_locks`
-# never ran once, and every push produced a failed run with no jobs in it. A gate that
-# cannot be parsed is worse than no gate, because the repository still claims to have one.
+# NOTHING HERE PUSHES TO DOCKER HUB. The job that did was removed: its `matrix.include`
+# had every entry commented out, which YAML reads as `include: null`. GitHub rejects an
+# empty matrix at parse time, so the whole file was invalid, `check_locks` never ran once,
+# and every push produced a failed run with no jobs in it. A gate that cannot be parsed
+# fails in the same direction as one that passes -- the repository kept claiming a
+# guarantee it had stopped providing.
 #
-# To restore it (docs/HANDOFF.md, "Not done yet" item 3), recover the job from
-# `git log -- .github/workflows/docker.yml` and give the matrix a real list. Note the list
-# that was commented out is stale: it names ten images and docker/ now holds sixteen --
-# checkamg, genomad, qc, vclust, viewer and vitap were never added. Restoring it verbatim
-# would publish a subset while looking like a full build.
+# Publishing is docs/HANDOFF.md "Not done yet" item 1. To restore that job, recover it
+# from `git log -- .github/workflows/docker.yml` and give the matrix a real list -- and
+# note the list that was commented out is stale: ten images named, sixteen present under
+# docker/, with checkamg, genomad, qc, vclust, viewer and vitap missing. Restoring it
+# verbatim would publish a subset while looking like a full build.
+
+  # First amd64 build of anything in this repository. Every image so far was built
+  # natively on aarch64, so "it builds" is an untested claim on x86-64 -- and the
+  # PHAMB path cannot be exercised anywhere else, because VAMB has no linux-aarch64
+  # build at all.
+  #
+  # Only the two images that path needs: VAMB and PHAMB_RF carry the
+  # `viroprofiler_binning` label, and GENEPRED/MICOMPLETEDB/VOGDB/PHAMB_DVF_TABLE
+  # carry `viroprofiler_base`. Building all sixteen would take hours and prove
+  # nothing extra about PHAMB.
+  #
+  # Nothing is pushed. Each Dockerfile ends with an `env -i` smoke test that
+  # exercises its tools under the image's own PATH, so a successful build is also
+  # a successful smoke test -- which is the whole result being sought here.
+  build_phamb_images:
+    name: amd64 build - ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [viroprofiler-base, viroprofiler-binning]
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      # A default runner has ~14 GB free, and these images do not fit beside the
+      # preinstalled Android SDK and .NET toolchains.
+      - name: Reclaim disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: "."
+          file: ./docker/${{ matrix.image }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+          tags: denglab/${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
