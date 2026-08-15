@@ -63,6 +63,7 @@ usability defect · **P3** hygiene.
 | [I-52](#i-52) | P0 | Databases — `DB_VCONTACT3` cannot download: `curl` is not in the image | Fixed |
 | [I-53](#i-53) | P2 | Databases — a symlinked database that is not bind-mounted is silently re-downloaded | Open |
 | [I-54](#i-54) | P1 | CI — `docker.yml` was invalid YAML, so the lockfile gate never ran once | Fixed |
+| [I-55](#i-55) | P2 | Modules — two of `ABUNDANCE`'s six CoverM passes feed nothing | Open |
 
 ---
 
@@ -1424,3 +1425,40 @@ The general shape is worth keeping in mind: **a CI gate that cannot be parsed fa
 same direction as one that passes.** Nothing goes red on the branch that broke it, the
 repository keeps documenting a guarantee it stopped providing, and the only way to notice is
 to ask when the check last actually ran.
+
+---
+
+<a id="i-55"></a>
+## I-55
+
+**Two of `ABUNDANCE`'s six CoverM invocations produce nothing anyone reads.** P2. Open.
+
+`ABUNDANCE` runs `coverm contig` six times, once per method, each a separate pass over every
+BAM in the run:
+
+| Method | Channel | Consumers |
+|---|---|---|
+| `count` | `ab_count_ch` | `RESULTS_TSE` |
+| `tpm` | `ab_tpm_ch` | `RESULTS_TSE` |
+| `trimmed_mean` | `ab_trmean_ch` | `RESULTS_TSE` |
+| `covered_fraction` | `ab_covfrac_ch` | `RESULTS_TSE` |
+| `rpkm` | `ab_rpkm_ch` | **none** |
+| `reads_per_base` | `ab_rpb_ch` | **none** |
+
+The last two are emitted and published, and no workflow references either channel. The TSE is
+built from the first four; `bin/create_tse.r` has no argument that could take the other two.
+vpfkit's `rpb2bpb()` was the one function that consumed a `reads_per_base` table, and nothing
+calls it either — it is deprecated as of vpfkit `bfc3c9b`, because CoverM measures exactly the
+depth it was estimating.
+
+So a third of the abundance stage re-reads every BAM to produce two files that only ever reach
+`publishDir`. That is not free: each pass is I/O-bound over the full alignment set.
+
+Deciding this needs a user, not a maintainer. Both tables are reasonable things to hand
+someone for their own analysis, and `rpkm` in particular is a normalization people ask for by
+name. The options are to keep them as documented side products, drop them, or — the only one
+that is purely a win — collapse the invocations, since `coverm contig` accepts
+`--methods count tpm trimmed_mean covered_fraction` in a single pass. That last one changes
+the output layout from one table per method to one wide table, so it is a real change to
+`RESULTS_TSE`'s inputs rather than a free optimization, and it needs the readers changed with
+it.
