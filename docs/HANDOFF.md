@@ -257,18 +257,23 @@ Three parts of that interface are worth knowing before changing either side:
 
 `devtools::test()` and `devtools::check()` pass on this machine, and that is the state this
 pipeline depends on: `RESULTS_TSE` runs vpfkit on Linux, inside the viewer image, at the
-release version of R. vpfkit's own CI is wider, and two of its five cells are still failing
-for reasons a run here would never surface:
+release version of R. vpfkit's CI now gates on three cells, all green:
+`ubuntu-latest` at `release` and `devel`, and `macos-latest` at `release`.
 
-| Cell | State |
+Two cells were removed from that matrix rather than fixed. **Neither platform is disowned —
+they are simply not gated on here**, and both failures are recorded because they are still
+real:
+
+| Cell | Why it is not in CI |
 |---|---|
-| `ubuntu-latest (release)`, `macos-latest (release)` | Green |
-| `ubuntu-latest (devel)` | Was failing on two assertions that matched the literal string `R version`; `R.version.string` on R devel reads `R Under development (unstable) (...)`. Fixed — the assertions now match the real version string |
-| `windows-latest (release)` | **Failing.** `test-fct_export.R` and `test-fct_report.R` both assert that a writer returns the path it was given, and Windows normalizes it. Nothing this pipeline reaches: the viewer image is Linux |
-| `ubuntu-latest (oldrel-1)` | **Failing before it gets to vpfkit at all.** `mia` will not build against the current `rbiom` — `object 'unifrac' is not exported by 'namespace:rbiom'`. An upstream Bioconductor/CRAN incompatibility; the lever is to drop the cell or pin `rbiom` |
+| `windows-latest (release)` | `test-fct_export.R` and `test-fct_report.R` both assert that a writer returns the path it was handed, and Windows normalizes it. A genuine portability defect in vpfkit, worth fixing on its own account; nothing this pipeline reaches, since the viewer image is Linux |
+| `ubuntu-latest (oldrel-1)` | Fails before reaching vpfkit at all: `mia` will not build against the current `rbiom` — `object 'unifrac' is not exported by 'namespace:rbiom'`. Upstream, and not ours to pin |
 
-The distinction matters when reading a red badge on that repository: it does not by itself mean
-`RESULTS_TSE` is at risk. Check which cell.
+The reason for removing rather than tolerating them: **a permanently red cell is worse than an
+absent one**, because it trains everyone to ignore the badge. That is how three assertions
+matching the literal string `R version` — which R devel does not produce — survived, and how a
+merge that broke the two cells that *had* been green went in against a PR showing no checks at
+all.
 
 ### Opening the viewer
 
@@ -448,22 +453,38 @@ Ordered by how much they change results.
      and that `vambbins_RF_predictions.txt` is non-empty.
    - `--use_iphop`, which is forced off in the arm64 profile.
 
-   **There is no amd64 machine on this network that can do both.** Both Sparks are aarch64,
-   and so is the m21 workstation (Darwin arm64). The only x86-64 host reachable here is the
-   NAS, `naspark` — Debian 12, 6 cores, **7 GB of RAM**, Docker 29.4.3 installed, 1.4 TB free
-   on `/volume1`. That is enough for `--binning phamb` on a small library, where VAMB's
-   footprint is modest, but not for iPHoP, which wants tens of GB. Two things need doing
-   before it can run anything: `jinlong` is not in the `docker` group (`sudo usermod -aG
-   docker jinlong`), and there is no `buildx` — fine for a native amd64 `docker build`, not
-   for a multi-arch one. Building the images is better done by CI, which runs on x86-64
-   already; the NAS is for *executing* the path that has never executed.
-3. **Restore the `.github/workflows/docker.yml` build matrix.** Every entry is still
-   commented out, so no image is built by CI on either architecture. The lockfile gate that
-   should accompany it (`check_locks`) is already in place; what is missing is the build and
-   push itself, which is the same work as item 1. Note that the commented matrix is also
-   *stale*: it lists ten images, and `docker/` now holds sixteen — `checkamg`, `genomad`,
-   `qc`, `vclust`, `viewer` and `vitap` have no entry at all. Uncommenting it as written would
-   publish a subset and look like a full build.
+   **No machine on this network can host that run.** Both Sparks are aarch64, and so is the
+   m21 workstation (Darwin arm64). The only x86-64 host reachable here is the NAS, `naspark` —
+   Debian 12, 6 cores, **7 GB of RAM**, 1.4 TB free on `/volume1`, Docker 29.4.3 but no
+   `buildx`, and `jinlong` not in the `docker` group. There is no Java, Nextflow or Apptainer
+   on it either. 7 GB rules out iPHoP outright.
+
+   So PHAMB is being taken to CI instead, in steps, because two questions have to be answered
+   in order and the first is cheap:
+
+   1. **Do the images build on amd64?** Nothing in this repository ever has. `docker.yml` now
+      builds `viroprofiler-base` and `viroprofiler-binning` — the two the PHAMB path needs —
+      on every change under `docker/`, without pushing. Each Dockerfile ends in an `env -i`
+      smoke test, so a green build is a green smoke test.
+   2. **Can VAMB work at this scale at all?** It trains a VAE, and the reference library is
+      161 contigs. That may be below the size it can operate at, in which case the honest
+      outcome is a documented lower bound rather than a passing test. Answering it needs a
+      fixture — `contigs_nrclib.fasta`, a few BAMs from
+      `viroprofiler_16sample/run_dram/mapping2contigs2/`, and `virus_genomad_summary.tsv`, all
+      of which exist — plus the two HMM databases, `micomplete` (small) and `vogdb` (~1 GB
+      over plain HTTP, [I-09](dev/KNOWN_ISSUES.md#i-09)), neither of which has ever been built
+      here.
+
+   A CI job is the right home for this even though it is not really a regression test: it is
+   the only x86-64 machine available, it has 16 GB against the NAS's 7, and `--binning phamb`
+   is already the one path CI alone exercises, in stub form.
+3. **Publish the images (see item 1) by restoring the build matrix.** `docker.yml` now builds
+   two images and pushes nothing. Restoring the push means recovering the removed job from
+   `git log -- .github/workflows/docker.yml`, giving its matrix a real list, and supplying the
+   `DOCKER_USER`/`DOCKER_PASSWORD` secrets. The list that was commented out is *stale*: ten
+   images named, sixteen present under `docker/` — `checkamg`, `genomad`, `qc`, `vclust`,
+   `viewer` and `vitap` are missing. Restoring it verbatim would publish a subset and look
+   like a full build.
 4. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
    process reads it — everything that runs VirSorter2 carries the `viroprofiler_virsorter2`
    label and gets its own image — and it is worth about 1 GB. It was left in place so that the
@@ -535,12 +556,11 @@ On the vpfkit side, ordered the same way:
    `dev/make_test_data.R` and were not regenerated after the assay rename, so they still use
    the legacy `tmm` spelling — which the viewer handles, and which makes them a useful test
    of exactly that path.
-4. **Get the CI matrix green, or narrow it honestly.** Two cells fail for reasons unrelated to
-   this pipeline; see [What is green over there](#what-is-green-over-there-and-what-is-not).
-   Windows is a real portability defect in vpfkit and is fixable; `oldrel-1` is an upstream
-   `mia`/`rbiom` incompatibility that may only be worth dropping. Leaving both red has a cost
-   beyond tidiness — a permanently red badge is one nobody reads, which is how the assertions
-   that merely described R's release wording survived.
+4. **Fix the Windows path assertions.** The matrix was narrowed to the three green cells, so
+   this no longer shows up as a red badge, but it is still a real defect: `export_vpftse()`
+   and `generate_report()` are asserted to return the path they were handed, and Windows
+   normalizes it. Someone running vpfkit on Windows hits the underlying behaviour, not just
+   the test. See [What is green over there](#what-is-green-over-there-and-what-is-not).
 
 ## Limits of what has been verified
 
