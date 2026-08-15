@@ -148,8 +148,14 @@ from ranked `--source NAME PRIORITY FILE` triples (smaller priority wins): VITAP
 Priority 2 is reserved for geNomad. It writes two tables: `taxonomy.tsv`, every rank with the
 source that filled it, and `taxonomy_tse.tsv`, the same lineages in the layout vpfkit's
 `read_taxonomy2()` requires — where `Domain` carries the ICTV realm, or the literal `Viruses`
-for a contig placed at a lower rank only, because `create_vpftse_vir()` reads a non-missing
-`Domain` as one of the votes that make a contig viral.
+for a contig placed at a lower rank only, so that the `taxonomy` vote in
+`annotate_viral_votes()` sees it.
+
+That vote no longer decides membership: `create_vpftse_vir()` defaults to
+`rule = "candidate"`, taking the viral set from `VIRCONTIGS_PRE`'s own list. The votes are
+still computed and stored as `rowData$viral_vote_*`, so an empty `Domain` costs a diagnostic
+column rather than shrinking the viral set. Pass `rule = "vote"` for the previous union
+behaviour.
 
 Binning: `params.binning` = false | "vrhyme" | "phamb". PHAMB is amd64-only — it classifies
 VAMB's clusters and VAMB has no linux-aarch64 build — and

@@ -24,7 +24,7 @@ LABEL author="Jinlong Ru"
 # the Copilot review fixes, so the image would have installed the older viewer.
 # `git merge-base --is-ancestor <ref> origin/main` is the check.
 ARG VPFKIT_REPO=deng-lab/vpfkit
-ARG VPFKIT_REF=b5113673856a1e4b6b5244cde2e2365ea99983af
+ARG VPFKIT_REF=7307a80ddfc04d97b46a777741a526eca290ce52
 LABEL org.opencontainers.image.revision="${VPFKIT_REF}"
 LABEL org.opencontainers.image.source="https://github.com/${VPFKIT_REPO}"
 

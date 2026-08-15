@@ -11,13 +11,29 @@ The pipeline is at 1.0.1 and works. It parses under the default parser of Nextfl
 sixteen-sample reference run reproduces to `max |diff| = 0`, and every database path has been
 built at least once.
 
+**Three things changed the day this was last edited, and the first one changes results:**
+
+1. **`create_vpftse_vir()` defaults to `rule = "candidate"`.** The viral set comes from the
+   pipeline's candidate list, not the OR of the detector votes: 102 contigs on the reference
+   run instead of 100. The stored reference `.rds` files were *not* regenerated — see
+   [Where the pipeline stands](#where-the-pipeline-stands) for how to get the new object from
+   the old one.
+2. **PHAMB has been executed for the first time**, on x86-64 in CI, and stops at VAMB for a
+   measured reason: 77 contigs pass the length filter against a batch size of 256. That is
+   the dataset, not the code. Item 2 under [Not done yet](#not-done-yet) has the detail.
+3. **Two databases that could never have been built now build.** `DB_VOGDB` and
+   `DB_MICOMPLETEDB` were both broken, by unrelated causes, and a `[ -d ]` guard turned both
+   failures silent ([I-56](dev/KNOWN_ISSUES.md#i-56)).
+
 **vpfkit is published; the images are not.** vpfkit 0.6.0 and the fixes after it are on `main`
 in both `deng-lab/vpfkit` and `rujinlong/vpfkit`, so
 `docker/viroprofiler-viewer/Dockerfile` now pins a SHA that a branch actually contains and the
-viewer image can be built by anyone. What still blocks every other user is item 1 under
-[Not done yet](#not-done-yet): `conf/modules.config` names image tags that exist only as local
-SIFs on this machine, so every profile except `arm64_local` is broken. `dev_ru` is also still
-local.
+viewer image can be built by anyone. `dev_ru` is pushed too, and its CI — stub tests, the
+lockfile gate, the amd64 image builds and the PHAMB run — is green.
+
+What still blocks every other user is item 1 under [Not done yet](#not-done-yet):
+`conf/modules.config` names image tags that exist only as local SIFs on this machine, so every
+profile except `arm64_local` is broken.
 
 **Pin vpfkit by a SHA that is reachable from a branch.** The pin held `efa71660` for a while,
 which was the tip of vpfkit's `dev` — and `dev` was squash-merged rather than fast-forwarded,
@@ -26,9 +42,10 @@ GitHub kept serving it, so nothing failed; the image would simply have installed
 branch contained. Check a new pin with
 `git merge-base --is-ancestor <ref> origin/main`.
 
-Before changing anything, run the four fast checks under
+Before changing anything, run checks 0-3 under
 [Testing what you change](#testing-what-you-change): they take seconds, need no database, and
-are what caught most of what is recorded here.
+are what caught most of what is recorded here. **Check `NXF_SYNTAX_PARSER` is unset first** --
+with it set, every one of them fails identically and blames the code.
 
 ## Where the pipeline stands
 
@@ -39,7 +56,7 @@ no aarch64 build:
 
 | | |
 |---|---|
-| Contigs | 161 in the dereplicated library, 100 called viral |
+| Contigs | 161 in the dereplicated library, **102** called viral (100 before the rule change below) |
 | Samples | 16, in two groups |
 | Assays | `counts`, `tpm`, `trimmed_mean`, `covfrac` |
 | `rowData` | 55 columns |
@@ -50,6 +67,20 @@ no aarch64 build:
 
 Anything that changes those numbers is a result change and needs explaining. Reproduce with
 the command under [Running it on this machine](#running-it-on-this-machine).
+
+**One such change is already in: `create_vpftse_vir()` now defaults to
+`rule = "candidate"`.** The viral set is taken from the pipeline's own candidate list rather
+than from the OR of the detector votes, which on this run means 102 contigs instead of 100 —
+two gained, none lost. The reasoning and the second-dataset measurement behind it are under
+[Not done yet](#not-done-yet).
+
+**The stored reference objects have not been regenerated**, so
+`viroprofiler_output.rds` still holds the 100-contig subset built under the old default. That
+is deliberate — they are the evidence for the strict-syntax comparison and should not be
+rewritten by an unrelated change — but it means a fresh run and the stored object now differ
+by exactly those two contigs. Recompute rather than re-derive:
+`create_vpftse_vir(readRDS(".../viroprofiler_output_all_contigs.rds"), reannotate = TRUE)`
+gives the 102-contig object from the same run.
 
 The strict-syntax migration was checked against this run rather than assumed harmless: the
 same sixteen samples, from a `sbatch --export=NIL` job with `NXF_SYNTAX_PARSER` unset — the
@@ -69,12 +100,12 @@ process and nothing that needs more than one sample per group — no ordination,
 no group comparison of any kind. Use the sixteen-sample set for anything statistical.
 
 This is 1.0.1, the first release since the published version;
-[vpfkit](#the-r-side-vpfkit-and-the-viewer) 0.6.0 is its R side, with 1115 tests passing and
+[vpfkit](#the-r-side-vpfkit-and-the-viewer) 0.6.0 is its R side, with 1125 tests passing and
 `R CMD check` reporting 0 errors, 0 warnings and 0 notes here — on Linux, at the release
 version of R. That is narrower than it sounds: vpfkit's CI matrix also builds on Windows,
 macOS, R devel and R oldrel-1, and two of those are still red for reasons that have nothing to
 do with this pipeline. [The R side](#the-r-side-vpfkit-and-the-viewer) has the breakdown.
-`dev_ru` is left unsquashed so that it can be squash-merged into `main`, and is not pushed.
+`dev_ru` is left unsquashed so that it can be squash-merged into `main`. It is pushed.
 
 ## Pipeline shape
 
@@ -379,16 +410,16 @@ A change that touches what `RESULTS_TSE` writes needs vpfkit's checks too:
 
 ```bash
 cd ~/github/rujinlong/vpfkit
-Rscript -e 'devtools::test()'          # 1115 assertions, no network, ~3 min
+Rscript -e 'devtools::test()'          # 1125 assertions, no network, ~3 min
 Rscript -e 'devtools::check()'         # 0 errors, 0 warnings, 0 notes on Linux/release
 
 # The viewer, in a real browser. Needs shinytest2 and a chromium.
 NOT_CRAN=true CHROMOTE_CHROME=/snap/bin/chromium Rscript dev/verify_app_headless.R
 ```
 
-One warning in `devtools::test()` is expected: `create_vpftse_vir` emits it deliberately when a
-vote's `rowData` columns are absent, and the test asserting that behaviour surfaces it. Any
-other warning is new.
+Two warnings in `devtools::test()` are expected, both raised deliberately under
+`rule = "vote"` when a vote's `rowData` columns are absent, by the tests that assert exactly
+that behaviour. Any other warning is new.
 
 `dev/verify_app_headless.R` defaults to the sixteen-sample object; point
 `VPFKIT_TEST_TSE` at another one to check it. It exists because a browser walk over this app
@@ -429,11 +460,16 @@ repository and stayed invisible for years.
 - **Stub tests validate topology, not schemas.** They pass whether or not a process writes the
   columns its consumers read — the DVF stub advertised `contig_id/dvf_score` while the real
   output was `name/len/score/pvalue/qvalue`, and nothing noticed. When you change an output,
-  diff the stub header against a real product. The taxonomy table `RESULTS_TSE` reads is where
-  this bites hardest today: [`bin/merge_taxonomy.py`](../bin/merge_taxonomy.py) writes it,
-  vpfkit's `read_taxonomy2()` demands an exact column set, and `create_vpftse_vir()` treats a
-  non-missing `Domain` as one of the votes that make a contig viral — so a renamed column
-  there shrinks the viral TSE instead of raising anything.
+  diff the stub header against a real product. The taxonomy table `RESULTS_TSE` reads is the
+  sharpest case: [`bin/merge_taxonomy.py`](../bin/merge_taxonomy.py) writes it and vpfkit's
+  `read_taxonomy2()` demands an exact column set, so a renamed column there silently empties
+  the taxonomy.
+
+  It used to be worse. Under the old `rule = "vote"` default, `Domain` was one of the votes
+  that decided viral identity, so renaming that one column *shrank the viral TSE* — a schema
+  slip turning into a different biological result. The `rule = "candidate"` default breaks
+  that link: the viral set now comes from the pipeline's candidate list, and a broken
+  taxonomy column costs taxonomy and a diagnostic vote, not membership.
 - **Loosening a version pin on a 2022-era tool is not an upgrade, it is an untested
   environment.** Unpinned solves reached Python 3.14, setuptools 84, snakemake 8, numpy 1.24,
   scipy 1.15 and pandas 3 — breaking DRAM, vConTACT2/3, VirSorter2, eggNOG-mapper and bacphlip
@@ -485,14 +521,18 @@ Ordered by how much they change results.
    reference runs used an image built from the local working tree
    (`denglab/viroprofiler-viewer:localtest`), which is a verification artefact, not something
    anyone else can reproduce; rebuild it from the pinned SHA before publishing.
-2. **Run on amd64.** Nothing here has been built or run on x86-64, and two paths have no
-   aarch64 execution route at all, so that run is their first real test:
-   - `--binning phamb`, end to end. Watch VAMB in particular: the depth table is built in
-     FASTA order by name lookup because `--jgi` pairs depths to contigs positionally, and the
-     process asserts the row count, so a mismatch fails loudly rather than clustering on
-     shuffled abundances. Then check that `run_RF.py` resolves to `/usr/local/bin/run_RF.py`
-     and that `vambbins_RF_predictions.txt` is non-empty.
-   - `--use_iphop`, which is forced off in the arm64 profile.
+2. **Run on amd64.** Two paths have no aarch64 execution route at all, so x86-64 is their only
+   real test. Both have moved since this item was written, and what is left of each is
+   specific:
+   - **`--binning phamb`** — the path now runs in CI as far as VAMB, which stops on a measured
+     size limit rather than a defect (see below). Everything upstream of it is exercised on
+     real data, including the depth table and its row-count assertion. What remains untested
+     is VAMB's clustering and PHAMB's bin calls, and that needs a **different dataset**, not
+     another run of this one.
+   - **`--use_iphop`** — forced off in the arm64 profile, so `RESULTS_TSE` has only ever seen
+     the placeholder. `DB_IPHOP` and `read_iphop()` have each been exercised elsewhere; see
+     [Limits of what has been verified](#limits-of-what-has-been-verified). The HPC cluster is
+     where this one gets finished.
 
    **No machine on this network can host that run.** Both Sparks are aarch64, and so is the
    m21 workstation (Darwin arm64). The only x86-64 host reachable here is the NAS, `naspark` —
@@ -559,33 +599,39 @@ Ordered by how much they change results.
    process reads it — everything that runs VirSorter2 carries the `viroprofiler_virsorter2`
    label and gets its own image — and it is worth about 1 GB. It was left in place so that the
    pixi migration changed packaging and nothing else.
-5. **Give the viewer something to say about iPHoP.** Host prediction is the one annotation
-   family with no real data behind it anywhere in this stack: iPHoP has no aarch64 build, so
-   its `RESULTS_TSE` slot has only ever carried a placeholder and `read_iphop()` has only
-   been checked against a fixture. The first amd64 run is where both get tested — and per
-   item 2, that run needs a machine this network does not currently have.
+5. **Give the viewer something to say about iPHoP.** Host prediction is still the one
+   annotation family whose slot in `RESULTS_TSE` has never held a real file, because iPHoP has
+   no aarch64 build. The reader is no longer the unknown part of that — `read_iphop()` has now
+   parsed a real 13,379-row iPHoP table from p0075 — so what is left is an end-to-end run that
+   puts one through `create_tse.r` and into the viewer. The HPC cluster can do it; it was
+   under maintenance when this was written.
 6. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md): the VOGDB host and its
    plain-HTTP URL (I-09), database setup steps that are not resumable (I-10), and the
    vendored nf-core modules pinned to 2022 releases (I-19).
 
-On the vpfkit side, ordered the same way:
+On the vpfkit side, ordered the same way. **Item 1 is settled and kept here for its
+reasoning**, because it is the one change in this list that moves a result; items 2 onwards are
+open.
 
-1. **Decide what `create_vpftse_vir()` should mean.** It keeps a contig if *any* detector
-   calls it, which makes the viral set a union of five tools' sensitivities rather than a
-   consensus. `rule = "candidate"` is implemented as an alternative, using the pipeline's own
-   candidate list. Measured on the sixteen-sample reference run (161 contigs, before the viral
-   subset):
+1. ~~Decide what `create_vpftse_vir()` should mean.~~ **Settled: it defaults to
+   `rule = "candidate"`.**
+   It used to keep a contig if *any* detector called it, making the viral set a union of five
+   tools' sensitivities rather than a consensus. The default is now the pipeline's own
+   candidate list: the set every stage downstream of `VIRCONTIGS_PRE` was actually computed
+   on. Measured on the sixteen-sample reference run (161 contigs, before the viral subset):
 
    | | |
    |---|---|
-   | Union (`rule = "vote"`, the default) | 100 contigs |
-   | Pipeline candidate list (`rule = "candidate"`) | 102 contigs |
+   | Union (`rule = "vote"`, the old default) | 100 contigs |
+   | Pipeline candidate list (`rule = "candidate"`, now the default) | 102 contigs |
    | In the union but not a candidate | **0** |
    | A candidate but not in the union | 2 |
    | Resting on exactly one vote | 10 — seven on `taxonomy`, three on `vibrant`, none on any other |
 
    So the union is a strict subset of the candidate list, and switching the rule adds two
    contigs — a far smaller change than "it changes every existing user's output" suggests.
+   Those two carry no detector vote at all (`viral_vote_n == 0`) and are in the candidate list
+   regardless, which is precisely the disagreement the two rules are about.
 
    **Measured again on a second dataset, and the case against the default is stronger there.**
    p0075 (pig CRC virome, 73 samples) has a dereplicated library of 16,934 contigs, two orders
@@ -633,6 +679,24 @@ On the vpfkit side, ordered the same way:
    Reproduce with `Rscript dev/analyse_viral_votes.R` in vpfkit. It needs an
    `*_all_contigs.rds` object: the viral subset has already dropped every contig the union
    rejected, so the same script against the final object can only ever report unanimity.
+
+   **What the change does not do is throw the votes away.** They are still computed and stored
+   under either rule, so `rowData$viral_vote_n` and `viral_vote_evidence` still answer "how
+   much support did this contig have" — a question the candidate list, being one flag, cannot.
+   `metadata()$viral_selection` records the rule, and gains `n_union` so the union count is
+   visible without recomputing it. The Shiny viewer reads the rule from there and needed no
+   change.
+
+   Two things behave differently now, both deliberately:
+
+   - An object built without `create_vpftse(fin_vircontigs = ...)` has no candidate list.
+     Under the default it falls back to `rule = "vote"` **with a warning**; asking for
+     `rule = "candidate"` by name on such an object is an error. Silently deciding by a
+     different rule than the one requested is how a viral set becomes something other than
+     what its caller believes it is.
+   - A missing *vote* column no longer warns under `rule = "candidate"`. It costs a diagnostic
+     column and nothing else there; `metadata()$viral_selection$votes_missing` still records
+     it.
 2. **`rpb2bpb()` is deprecated; decide what happens to its input.** It assumed 150 bp reads
    where the reference run's true mean aligned length is about 125, overstating depth by
    roughly 20 %, and it estimated what CoverM measures exactly and the pipeline already stores
