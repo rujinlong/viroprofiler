@@ -31,9 +31,10 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      # VOGDB peaks at ~9.5 GB while it is being built: a 554 MB archive, 49116
-      # unpacked profiles, and the 4.4 GB concatenation of them. Add two images on
-      # top and a default runner does not fit it.
+      # The databases do not fit a default runner beside its preinstalled toolchains.
+      # VOGDB peaks at ~9.5 GB while being built -- a 554 MB archive, 49116 unpacked
+      # profiles and the 4.4 GB concatenation of them -- settling to 4.4 GB, and
+      # CheckV adds 6.4 GB. Two images on top of that.
       - name: Reclaim disk space
         run: |
           df -h /
@@ -79,8 +80,16 @@ jobs:
       # Through the real DB_* processes, not a shell script: both were broken until
       # recently (I-56) in ways their own content checks now catch, so building them
       # here is what keeps that fixed.
-      - name: Build the two HMM databases PHAMB needs
+      - name: Build the databases PHAMB needs
         run: |
+          # Create --db on the host first. Docker creates a missing bind-mount
+          # source itself, as root, and the container runs as the invoking user
+          # (docker.runOptions = -u $(id -u):$(id -g)) -- so a --db path that does
+          # not exist yet becomes a directory the pipeline cannot write into, and
+          # the first DB_* process dies on `mkdir: Permission denied` several
+          # hundred MB into a download.
+          mkdir -p "$PWD/phamb_db"
+
           nextflow run tests/phamb_entry.nf \
             -profile docker \
             --phamb_stage databases \
@@ -88,9 +97,10 @@ jobs:
             --db "$PWD/phamb_db" \
             --max_cpus 4 --max_memory 12.GB
           echo "--- what was published ---"
-          ls -la phamb_db/vogdb phamb_db/micomplete
+          ls -la phamb_db/vogdb phamb_db/micomplete phamb_db/checkv
           echo "vogdb profiles:      $(grep -c '^HMMER3/' phamb_db/vogdb/AllVOG.hmm)"
           echo "micomplete profiles: $(grep -c '^HMMER3/' phamb_db/micomplete/Bact105.hmm)"
+          du -sh phamb_db/*
           df -h /
 
       - name: Run the PHAMB path

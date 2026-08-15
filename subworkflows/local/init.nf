@@ -2,6 +2,18 @@ include { DB_CHECKV; DB_VIRSORTER2; DB_DRAM; DB_VIBRANT; DB_IPHOP; DB_EGGNOG; DB
 
 workflow SETUP {
     main:
+    // Create --db here, on the host, before any container starts. Docker creates a
+    // missing bind-mount source itself and does so as root, while the container runs
+    // as the invoking user (`docker.runOptions = '-u $(id -u):$(id -g)'`) -- so
+    // pointing --db at a path that does not exist yet produces a directory the
+    // pipeline cannot write into. The symptom is a `mkdir: Permission denied` from
+    // whichever DB_* process gets there first, typically several hundred MB into a
+    // download, and it names neither Docker nor the mount.
+    //
+    // Nextflow runs this on the host as the invoking user, so the directory exists
+    // and is owned correctly by the time anything is mounted.
+    file(params.db).mkdirs()
+
     DB_CHECKV()
     DB_GENOMAD()
     DB_VIRSORTER2()

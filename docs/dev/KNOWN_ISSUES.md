@@ -65,6 +65,7 @@ usability defect · **P3** hygiene.
 | [I-54](#i-54) | P1 | CI — `docker.yml` was invalid YAML, so the lockfile gate never ran once | Fixed |
 | [I-55](#i-55) | P2 | Modules — two of `ABUNDANCE`'s six CoverM passes feed nothing | Open |
 | [I-56](#i-56) | P0 | Databases — neither PHAMB database could be built, and the guard hid both | Fixed |
+| [I-57](#i-57) | P1 | Config — Docker creates a missing `--db` as root, so setup cannot write to it | Fixed |
 
 ---
 
@@ -1544,3 +1545,41 @@ Three lessons this repository already knew, all of which applied here:
   detect a missing bind; it actively converted a hard failure into a silent one.
 - **When an upstream layout change breaks one consumer, look for the others.** I-30 found the
   cause and fixed one call site. The grep for the other one is cheap and was never done.
+
+---
+
+<a id="i-57"></a>
+## I-57
+
+**A `--db` path that does not exist yet is created by Docker, as root, and then nothing can
+write to it.** P1. Fixed.
+
+`--mode setup` exists to build databases into `--db`, so pointing it at an empty path is the
+obvious first thing to do. Under `-profile docker` it failed:
+
+```
+mkdir: cannot create directory '/home/runner/work/.../phamb_db/vogdb': Permission denied
+```
+
+Docker creates a missing bind-mount source itself, and it creates it as **root**. The
+container, meanwhile, runs as the invoking user — `docker.runOptions = '-u $(id -u):$(id -g)'`
+in the `docker` profile — so the first `DB_*` process to reach a `mkdir` cannot write into the
+directory Docker just made for it.
+
+Three things made this hard to read:
+
+- The message names neither Docker nor the mount. It looks like a filesystem permissions
+  problem on the host, where the path is in fact writable.
+- It arrives *late*. `DB_VOGDB` downloads 554 MB, unpacks 49116 profiles and concatenates them
+  before it ever tries to publish, so the failure is minutes in and after a great deal of
+  apparently healthy output.
+- It does not reproduce under Apptainer, which does not create missing bind sources and would
+  have refused up front. Every real run on the development machine uses Apptainer.
+
+Fixed by creating the directory on the host, in `SETUP`, before any container starts —
+Nextflow evaluates that as the invoking user, so the directory exists and is owned correctly
+by the time anything is mounted. `tests/phamb_entry.nf` does the same for its `databases`
+stage, which does not go through `SETUP`.
+
+Found by running the PHAMB path in CI for the first time, which is also the first time this
+repository ran `--mode setup` under Docker rather than Apptainer.

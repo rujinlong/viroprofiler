@@ -46,7 +46,7 @@ path a fixture with matching counts would fail to exercise.
 */
 
 include { vMAG_PHAMB } from '../subworkflows/local/vMAG'
-include { DB_VOGDB; DB_MICOMPLETEDB } from '../modules/local/setup_db'
+include { DB_VOGDB; DB_MICOMPLETEDB; DB_CHECKV } from '../modules/local/setup_db'
 
 params.phamb_stage   = 'run'
 params.phamb_contigs = null
@@ -55,8 +55,17 @@ params.phamb_bams    = null
 
 workflow {
     if (params.phamb_stage == 'databases') {
+        // As in SETUP: create --db on the host first, or Docker creates it as root
+        // while the container runs as the invoking user, and every DB_* process
+        // fails on `mkdir: Permission denied`.
+        file(params.db).mkdirs()
+
         DB_VOGDB()
         DB_MICOMPLETEDB()
+        // CheckV as well: vMAG_PHAMB ends in CHECKV4PHAMB, which QCs the bins the
+        // random forest called, so the path does not complete without it. At
+        // 6.4 GB it is the largest single cost of running PHAMB.
+        DB_CHECKV()
     }
     else if (params.phamb_stage == 'run') {
         if (!params.phamb_contigs || !params.phamb_genomad || !params.phamb_bams) {
