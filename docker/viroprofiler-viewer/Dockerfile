@@ -12,12 +12,19 @@ LABEL author="Jinlong Ru"
 # vpfkit is pinned to a commit SHA, not `main`: on `main` a rebuild could change
 # what create_tse.r calls without any file in this repository changing.
 #
-# This commit is vpfkit 0.6.0, the rewrite that RESULTS_TSE needs -- it is what
-# exports annotate_viral_votes(). It has to be pushed before this image can be
-# built; see docs/HANDOFF.md. Point VPFKIT_REPO at whichever fork carries it:
-#   docker build --build-arg VPFKIT_REPO=rujinlong/vpfkit ...
+# This commit is vpfkit 0.6.0 -- the rewrite that RESULTS_TSE needs, because it
+# is what exports annotate_viral_votes() -- plus the fixes that followed it. It
+# is on `main` in both deng-lab/vpfkit and rujinlong/vpfkit.
+#
+# Pin a SHA that is *reachable from a branch*. The previous value, efa71660,
+# was the tip of vpfkit's `dev`, and `dev` was squash-merged rather than
+# fast-forwarded: the commit it named survived only as an unreferenced object
+# and was never an ancestor of `main`. GitHub still served it, so the build
+# kept working while pointing at code no branch contained -- and it predated
+# the Copilot review fixes, so the image would have installed the older viewer.
+# `git merge-base --is-ancestor <ref> origin/main` is the check.
 ARG VPFKIT_REPO=deng-lab/vpfkit
-ARG VPFKIT_REF=efa71660aa548c53ca0277bdc69d91e02dc8f982
+ARG VPFKIT_REF=23bcbf0cc79ae5f25a75fe870b8fccc86629516a
 LABEL org.opencontainers.image.revision="${VPFKIT_REF}"
 LABEL org.opencontainers.image.source="https://github.com/${VPFKIT_REPO}"
 

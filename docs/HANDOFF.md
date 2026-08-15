@@ -9,13 +9,22 @@ Companion documents: [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md) (every defect found,
 
 The pipeline is at 1.0.1 and works. It parses under the default parser of Nextflow 26.04, the
 sixteen-sample reference run reproduces to `max |diff| = 0`, and every database path has been
-built at least once. Nothing is pushed: `dev_ru` and vpfkit's `dev` are both local.
+built at least once.
 
-**One push blocks everyone else.** vpfkit `dev` is a single commit on top of
-`deng-lab/vpfkit`'s `main`, ready to fast-forward, and
-`docker/viroprofiler-viewer/Dockerfile` pins it by SHA. Until it lands, GitHub has never seen
-that commit, so the viewer image cannot be built — by anyone, including CI — and item 2 under
-[Not done yet](#not-done-yet) cannot start either. Items 3 onwards are independent of it.
+**vpfkit is published; the images are not.** vpfkit 0.6.0 and the fixes after it are on `main`
+in both `deng-lab/vpfkit` and `rujinlong/vpfkit`, so
+`docker/viroprofiler-viewer/Dockerfile` now pins a SHA that a branch actually contains and the
+viewer image can be built by anyone. What still blocks every other user is item 1 under
+[Not done yet](#not-done-yet): `conf/modules.config` names image tags that exist only as local
+SIFs on this machine, so every profile except `arm64_local` is broken. `dev_ru` is also still
+local.
+
+**Pin vpfkit by a SHA that is reachable from a branch.** The pin held `efa71660` for a while,
+which was the tip of vpfkit's `dev` — and `dev` was squash-merged rather than fast-forwarded,
+so that commit was never an ancestor of `main` and survived only as an unreferenced object.
+GitHub kept serving it, so nothing failed; the image would simply have installed a vpfkit no
+branch contained. Check a new pin with
+`git merge-base --is-ancestor <ref> origin/main`.
 
 Before changing anything, run the four fast checks under
 [Testing what you change](#testing-what-you-change): they take seconds, need no database, and
@@ -60,9 +69,12 @@ process and nothing that needs more than one sample per group — no ordination,
 no group comparison of any kind. Use the sixteen-sample set for anything statistical.
 
 This is 1.0.1, the first release since the published version;
-[vpfkit](#the-r-side-vpfkit-and-the-viewer) 0.6.0 is its R side, with `R CMD check` clean and
-1107 tests passing. `dev_ru` is left unsquashed so that it can be squash-merged into `main`;
-vpfkit's `dev` is already one commit. Neither is pushed — see [Start here](#start-here).
+[vpfkit](#the-r-side-vpfkit-and-the-viewer) 0.6.0 is its R side, with 1115 tests passing and
+`R CMD check` reporting 0 errors, 0 warnings and 0 notes here — on Linux, at the release
+version of R. That is narrower than it sounds: vpfkit's CI matrix also builds on Windows,
+macOS, R devel and R oldrel-1, and two of those are still red for reasons that have nothing to
+do with this pipeline. [The R side](#the-r-side-vpfkit-and-the-viewer) has the breakdown.
+`dev_ru` is left unsquashed so that it can be squash-merged into `main`, and is not pushed.
 
 ## Pipeline shape
 
@@ -199,7 +211,7 @@ for a while, replace the older set and drop the `--sif_dir` override.
 
 The pipeline's last process, `RESULTS_TSE`, is an R script that calls
 [vpfkit](https://github.com/deng-lab/vpfkit), a separate repository checked out at
-`~/github/rujinlong/vpfkit` (branch `dev`). Everything downstream of the tool outputs lives
+`~/github/rujinlong/vpfkit` (branch `main`). Everything downstream of the tool outputs lives
 there: the readers, the object constructor, the Shiny viewer, the Quarto report and the
 exporters. Changing either repository without the other is the main way to break this.
 
@@ -240,6 +252,23 @@ Three parts of that interface are worth knowing before changing either side:
   depth in x-fold, not a normalization; `covfrac` is a breadth in `[0, 1]` and is a detection
   mask, never an abundance. `metadata(tse)$viroprofiler$assays` carries that description with
   the object, and `normalize_assay_names()` maps older spellings onto the current ones.
+
+### What is green over there, and what is not
+
+`devtools::test()` and `devtools::check()` pass on this machine, and that is the state this
+pipeline depends on: `RESULTS_TSE` runs vpfkit on Linux, inside the viewer image, at the
+release version of R. vpfkit's own CI is wider, and two of its five cells are still failing
+for reasons a run here would never surface:
+
+| Cell | State |
+|---|---|
+| `ubuntu-latest (release)`, `macos-latest (release)` | Green |
+| `ubuntu-latest (devel)` | Was failing on two assertions that matched the literal string `R version`; `R.version.string` on R devel reads `R Under development (unstable) (...)`. Fixed — the assertions now match the real version string |
+| `windows-latest (release)` | **Failing.** `test-fct_export.R` and `test-fct_report.R` both assert that a writer returns the path it was given, and Windows normalizes it. Nothing this pipeline reaches: the viewer image is Linux |
+| `ubuntu-latest (oldrel-1)` | **Failing before it gets to vpfkit at all.** `mia` will not build against the current `rbiom` — `object 'unifrac' is not exported by 'namespace:rbiom'`. An upstream Bioconductor/CRAN incompatibility; the lever is to drop the cell or pin `rbiom` |
+
+The distinction matters when reading a red badge on that repository: it does not by itself mean
+`RESULTS_TSE` is at risk. Check which cell.
 
 ### Opening the viewer
 
@@ -299,17 +328,24 @@ A change that touches what `RESULTS_TSE` writes needs vpfkit's checks too:
 
 ```bash
 cd ~/github/rujinlong/vpfkit
-Rscript -e 'devtools::test()'          # 1107 assertions, no network, seconds
-Rscript -e 'devtools::check()'         # currently 0 errors, 0 warnings, 0 notes
+Rscript -e 'devtools::test()'          # 1115 assertions, no network, ~3 min
+Rscript -e 'devtools::check()'         # 0 errors, 0 warnings, 0 notes on Linux/release
 
 # The viewer, in a real browser. Needs shinytest2 and a chromium.
 NOT_CRAN=true CHROMOTE_CHROME=/snap/bin/chromium Rscript dev/verify_app_headless.R
 ```
 
+One warning in `devtools::test()` is expected: `create_vpftse_vir` emits it deliberately when a
+vote's `rowData` columns are absent, and the test asserting that behaviour surfaces it. Any
+other warning is new.
+
 `dev/verify_app_headless.R` defaults to the sixteen-sample object; point
 `VPFKIT_TEST_TSE` at another one to check it. It exists because a browser walk over this app
 passes without testing anything in two different ways — the dataset has to be *loaded*, not
-merely chosen, and Shiny suspends outputs on inactive tabs — and its header says so.
+merely chosen, and Shiny suspends outputs on inactive tabs — and its header says so. A pass
+prints `TOTAL error panels: 0 | browser errors: 0` after visiting eleven tabs; anything less
+than the full walk is a failure, including the one that reads `No dataset loaded` — that is the
+guard catching an upload the browser could not see, not a viewer bug.
 
 Four things none of these can tell you, so check by hand:
 
@@ -385,27 +421,20 @@ checkout, and it is amd64-only in any case. Reasoning and per-image notes:
 
 Ordered by how much they change results.
 
-1. **Push vpfkit.** The one manual step everything else waits on.
-   `~/github/rujinlong/vpfkit` branch `dev` is a single commit,
-   `efa71660aa548c53ca0277bdc69d91e02dc8f982`, on top of `deng-lab/vpfkit`'s `main` — a
-   fast-forward, nothing to resolve. `docker/viroprofiler-viewer/Dockerfile` pins that SHA,
-   so re-squashing or amending means updating `VPFKIT_REF` in the same change.
-
-   `VPFKIT_REPO` is a build argument defaulting to `deng-lab/vpfkit`. While the commit lives
-   only on a fork, build with
-   `VPFKIT_REPO=rujinlong/vpfkit bash docker/build_arm64.sh viewer`.
-
-   The sixteen-sample reference runs used an image built from the local working tree
-   (`denglab/viroprofiler-viewer:localtest`), which is a verification artefact, not something
-   anyone else can reproduce.
-2. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
+1. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
    local SIFs — `vcontact3`, `vclust`, `vitap`, `genomad`, `checkamg` were never published,
    and every other image now differs in content from the tag it names — so every profile other
    than `arm64_local` is currently broken. This is the last step before anyone else can run
    the pipeline. Bump the tags rather than overwriting: an image built from a lockfile and one
    built from a loose environment file are not the same artifact, and reusing `v0.2`/`v0.3`
    would leave existing installations silently on the old one.
-3. **Run on amd64.** Nothing here has been built or run on x86-64, and two paths have no
+
+   The viewer image is no longer a special case: `VPFKIT_REF` points at a commit on
+   `deng-lab/vpfkit`'s `main`, so the default `VPFKIT_REPO` builds it. The sixteen-sample
+   reference runs used an image built from the local working tree
+   (`denglab/viroprofiler-viewer:localtest`), which is a verification artefact, not something
+   anyone else can reproduce; rebuild it from the pinned SHA before publishing.
+2. **Run on amd64.** Nothing here has been built or run on x86-64, and two paths have no
    aarch64 execution route at all, so that run is their first real test:
    - `--binning phamb`, end to end. Watch VAMB in particular: the depth table is built in
      FASTA order by name lookup because `--jgi` pairs depths to contigs positionally, and the
@@ -413,19 +442,33 @@ Ordered by how much they change results.
      shuffled abundances. Then check that `run_RF.py` resolves to `/usr/local/bin/run_RF.py`
      and that `vambbins_RF_predictions.txt` is non-empty.
    - `--use_iphop`, which is forced off in the arm64 profile.
-4. **Restore the `.github/workflows/docker.yml` build matrix.** Every entry is still
+
+   **There is no amd64 machine on this network that can do both.** Both Sparks are aarch64,
+   and so is the m21 workstation (Darwin arm64). The only x86-64 host reachable here is the
+   NAS, `naspark` — Debian 12, 6 cores, **7 GB of RAM**, Docker 29.4.3 installed, 1.4 TB free
+   on `/volume1`. That is enough for `--binning phamb` on a small library, where VAMB's
+   footprint is modest, but not for iPHoP, which wants tens of GB. Two things need doing
+   before it can run anything: `jinlong` is not in the `docker` group (`sudo usermod -aG
+   docker jinlong`), and there is no `buildx` — fine for a native amd64 `docker build`, not
+   for a multi-arch one. Building the images is better done by CI, which runs on x86-64
+   already; the NAS is for *executing* the path that has never executed.
+3. **Restore the `.github/workflows/docker.yml` build matrix.** Every entry is still
    commented out, so no image is built by CI on either architecture. The lockfile gate that
    should accompany it (`check_locks`) is already in place; what is missing is the build and
-   push itself, which is the same work as item 1.
-5. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
+   push itself, which is the same work as item 1. Note that the commented matrix is also
+   *stale*: it lists ten images, and `docker/` now holds sixteen — `checkamg`, `genomad`,
+   `qc`, `vclust`, `viewer` and `vitap` have no entry at all. Uncommenting it as written would
+   publish a subset and look like a full build.
+4. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
    process reads it — everything that runs VirSorter2 carries the `viroprofiler_virsorter2`
    label and gets its own image — and it is worth about 1 GB. It was left in place so that the
    pixi migration changed packaging and nothing else.
-6. **Give the viewer something to say about iPHoP.** Host prediction is the one annotation
+5. **Give the viewer something to say about iPHoP.** Host prediction is the one annotation
    family with no real data behind it anywhere in this stack: iPHoP has no aarch64 build, so
    its `RESULTS_TSE` slot has only ever carried a placeholder and `read_iphop()` has only
-   been checked against a fixture. The first amd64 run is where both get tested.
-7. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md): the VOGDB host and its
+   been checked against a fixture. The first amd64 run is where both get tested — and per
+   item 2, that run needs a machine this network does not currently have.
+6. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md): the VOGDB host and its
    plain-HTTP URL (I-09), database setup steps that are not resumable (I-10), and the
    vendored nf-core modules pinned to 2022 releases (I-19).
 
@@ -446,6 +489,12 @@ On the vpfkit side, ordered the same way:
    `dev/make_test_data.R` and were not regenerated after the assay rename, so they still use
    the legacy `tmm` spelling — which the viewer handles, and which makes them a useful test
    of exactly that path.
+4. **Get the CI matrix green, or narrow it honestly.** Two cells fail for reasons unrelated to
+   this pipeline; see [What is green over there](#what-is-green-over-there-and-what-is-not).
+   Windows is a real portability defect in vpfkit and is fixable; `oldrel-1` is an upstream
+   `mia`/`rbiom` incompatibility that may only be worth dropping. Leaving both red has a cost
+   beyond tidiness — a permanently red badge is one nobody reads, which is how the assertions
+   that merely described R's release wording survived.
 
 ## Limits of what has been verified
 

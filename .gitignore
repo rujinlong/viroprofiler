@@ -16,3 +16,8 @@ testing*
 # pixi.toml and pixi.lock belong in the repository -- the environments themselves are
 # built inside the images.
 docker/*/.pixi/
+
+# The rendered docs site. `mkdocs build --strict` is one of the standard checks in
+# docs/HANDOFF.md, so anyone following it lands an untracked site/ here; the published
+# copy is built by CI onto gh-pages.
+site/
