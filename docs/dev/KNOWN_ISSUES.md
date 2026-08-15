@@ -1600,7 +1600,7 @@ Three things made this hard to read:
 
 Fixed by creating the directory on the host, in `SETUP`, before any container starts —
 Nextflow evaluates that as the invoking user, so the directory exists and is owned correctly
-by the time anything is mounted. `tests/phamb_entry.nf` does the same for its `databases`
+by the time anything is mounted. `phamb_entry.nf` does the same for its `databases`
 stage, which does not go through `SETUP`.
 
 Found by running the PHAMB path in CI for the first time, which is also the first time this

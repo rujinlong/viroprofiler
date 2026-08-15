@@ -348,16 +348,16 @@ nextflow run main.nf -profile apptainer,arm64_local ...    # full command above
 
 # 5. The PHAMB path, which none of the above reaches. x86-64 only: VAMB has no
 #    linux-aarch64 build, so on this machine it gets as far as pulling the image.
-nextflow run tests/phamb_entry.nf -profile docker --phamb_stage databases \
+nextflow run phamb_entry.nf -profile docker --phamb_stage databases \
     --mode setup --db "$PWD/phamb_db"
-nextflow run tests/phamb_entry.nf -profile docker --db "$PWD/phamb_db" \
+nextflow run phamb_entry.nf -profile docker --db "$PWD/phamb_db" \
     --outdir phamb_out \
     --phamb_contigs assets/test_phamb/putative_vcontigs.fasta \
     --phamb_genomad assets/test_phamb/genomad_virus_summary.tsv \
     --phamb_bams   'assets/test_phamb/bams/*.bam'
 ```
 
-`tests/phamb_entry.nf` exists because `vMAG_PHAMB` is reachable only from inside
+`phamb_entry.nf` exists because `vMAG_PHAMB` is reachable only from inside
 `VIROPROFILER` and `CONTIGANNO` has no binning path, so there was no way to run it without
 assembling first. Its two stages are selected with `--phamb_stage`, **not** `-entry`: the
 strict parser rejects that option outright — *"the `-entry` option is not supported with the
@@ -513,7 +513,7 @@ Ordered by how much they change results.
       [Limits of what has been verified](#limits-of-what-has-been-verified) for the table and
       for what those checks still do not cover.
    2. **Can VAMB work at this scale at all?** This is the open question, and everything
-      needed to answer it is in place: [`tests/phamb_entry.nf`](../tests/phamb_entry.nf) with
+      needed to answer it is in place: [`phamb_entry.nf`](../phamb_entry.nf) with
       its two stages, the 7 MB fixture in [`assets/test_phamb/`](../assets/test_phamb/), the
       three databases the path reads, and
       [`.github/workflows/phamb.yml`](../.github/workflows/phamb.yml) to run it on x86-64.

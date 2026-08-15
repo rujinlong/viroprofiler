@@ -129,6 +129,12 @@ cover. See [docs/dev/PACKAGING.md](docs/dev/PACKAGING.md).
 `parse_vclust_clusters.py`, `create_tse.r`). They must be executable: Nextflow puts `bin/`
 on PATH but does not chmod anything.
 
+**It resolves `bin/` relative to the directory holding the entry script, so an entry script
+must live in the repository root.** `phamb_entry.nf` was briefly under `tests/`, and every
+process that called a `bin/` script died with `command not found` — Nextflow was looking for
+`tests/bin/`. `-main-script` does not change this. The symptom passes every stub test, because
+stub blocks do not call those scripts, and `.command.run` simply has no `bin/` bind in it.
+
 ### Groovy Libraries
 
 `lib/` contains workflow utilities: `WorkflowMain.groovy` (parameter validation, citation), `WorkflowViroprofiler.groovy` (pipeline-specific checks), `NfcoreSchema.groovy` (JSON schema validation), `NfcoreTemplate.groovy` (email/output templates).
@@ -198,7 +204,7 @@ They are not style preferences.
   handlers belong in the entry workflow's `onComplete:` section.
 - **`-entry` does not exist under the strict parser.** It fails with "use a param to run a
   named workflow from the entry workflow", which is why the pipeline selects stages with
-  `--mode` and `tests/phamb_entry.nf` with `--phamb_stage`. A workflow reachable only by
+  `--mode` and `phamb_entry.nf` with `--phamb_stage`. A workflow reachable only by
   `-entry` is a workflow nothing can run.
 - **`NXF_SYNTAX_PARSER=v1` in the environment breaks every local check, and says nothing
   about why.** The first error is `Unknown execution scope 'onComplete:'`, which reads as a

@@ -1,7 +1,7 @@
 # PHAMB fixture
 
 Real output from the sixteen-sample reference run, cut down to what
-[`tests/phamb_entry.nf`](../../tests/phamb_entry.nf) needs to exercise the PHAMB binning path
+[`phamb_entry.nf`](../../phamb_entry.nf) needs to exercise the PHAMB binning path
 without first running assembly, dereplication, CheckV and geNomad.
 
 It exists because that path cannot be run on the development machine at all — VAMB has no

@@ -13,11 +13,11 @@ on x86-64, which in practice means CI.
 Two stages, selected with `--phamb_stage`:
 
     # 1. the two HMM databases PHAMB needs, and only those
-    nextflow run tests/phamb_entry.nf -profile docker \
+    nextflow run phamb_entry.nf -profile docker \
         --phamb_stage databases --mode setup --db /path/to/db
 
     # 2. the binning path itself, from a fixture
-    nextflow run tests/phamb_entry.nf -profile docker --db /path/to/db \
+    nextflow run phamb_entry.nf -profile docker --db /path/to/db \
         --phamb_contigs assets/test_phamb/putative_vcontigs.fasta \
         --phamb_genomad assets/test_phamb/genomad_virus_summary.tsv \
         --phamb_bams   'assets/test_phamb/bams/*.bam'
@@ -45,8 +45,8 @@ library (161). VAMB's depth table has to be rebuilt in FASTA order because
 path a fixture with matching counts would fail to exercise.
 */
 
-include { vMAG_PHAMB } from '../subworkflows/local/vMAG'
-include { DB_VOGDB; DB_MICOMPLETEDB; DB_CHECKV } from '../modules/local/setup_db'
+include { vMAG_PHAMB } from './subworkflows/local/vMAG'
+include { DB_VOGDB; DB_MICOMPLETEDB; DB_CHECKV } from './modules/local/setup_db'
 
 params.phamb_stage   = 'run'
 params.phamb_contigs = null

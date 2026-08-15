@@ -16,7 +16,7 @@ on:
     paths:
       - "subworkflows/local/vMAG.nf"
       - "modules/local/binning.nf"
-      - "tests/phamb_entry.nf"
+      - "phamb_entry.nf"
       - "assets/test_phamb/**"
       - "docker/viroprofiler-binning/**"
       - ".github/workflows/phamb.yml"
@@ -90,7 +90,7 @@ jobs:
           # hundred MB into a download.
           mkdir -p "$PWD/phamb_db"
 
-          nextflow run tests/phamb_entry.nf \
+          nextflow run phamb_entry.nf \
             -profile docker \
             --phamb_stage databases \
             --mode setup \
@@ -105,7 +105,7 @@ jobs:
 
       - name: Run the PHAMB path
         run: |
-          nextflow run tests/phamb_entry.nf \
+          nextflow run phamb_entry.nf \
             -profile docker \
             --db "$PWD/phamb_db" \
             --outdir "$PWD/phamb_out" \
