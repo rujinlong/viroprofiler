@@ -512,25 +512,38 @@ Ordered by how much they change results.
       `run_RF.py` writes a predictions file when run with real arguments. See
       [Limits of what has been verified](#limits-of-what-has-been-verified) for the table and
       for what those checks still do not cover.
-   2. **Can VAMB work at this scale at all?** This is the open question, and everything
-      needed to answer it is in place: [`phamb_entry.nf`](../phamb_entry.nf) with
-      its two stages, the 7 MB fixture in [`assets/test_phamb/`](../assets/test_phamb/), the
-      three databases the path reads, and
-      [`.github/workflows/phamb.yml`](../.github/workflows/phamb.yml) to run it on x86-64.
+   2. **Can VAMB work at this scale? No — and the reference dataset cannot answer the
+      question at all.** Run on x86-64 via
+      [`.github/workflows/phamb.yml`](../.github/workflows/phamb.yml), VAMB stops with
 
-      **The number that matters is 77, not 161.** The fixture holds the 102 putative viral
-      contigs, and `VAMB` is given `-m ${params.binning_minlen_contig}`, which is 5000 — so 77
-      sequences totalling 1.48 Mbp reach the VAE, with a median length of 8.9 kb. VAMB's
-      default batch size is 256. It was designed for libraries three or four orders of
-      magnitude larger than this, so the likely outcome is that it cannot cluster this
-      meaningfully, and **a documented lower bound is a legitimate answer** — the workflow's
-      failure message says so, to keep a red run from being read as a code defect.
+      ```
+      ValueError: Fewer sequences left after filtering than the batch size.
+      ```
 
-      Two failures had to be cleared before the path could even start, both invisible until
-      it was actually run: [I-56](dev/KNOWN_ISSUES.md#i-56), where neither HMM database could
-      be built and the guard turned both failures silent, and
-      [I-57](dev/KNOWN_ISSUES.md#i-57), where Docker created a missing `--db` as root and
-      nothing could then write to it.
+      raised in `vamb/encode.py:make_dataloader`. It trains a variational autoencoder and
+      needs at least one batch, 256 contigs by default. **The number that governs this is 77**:
+      the reference run yields 161 contigs, 102 of them viral, and 77 of those at or above
+      `--binning_minlen_contig` of 5000. No fixture drawn from this study can reach 256, so
+      answering "does PHAMB bin correctly" needs **a different dataset** — a few hundred viral
+      contigs — not a rearrangement of this one.
+
+      `VAMB` now checks the count itself and says so, naming both numbers and the alternatives,
+      because VAMB's own message names neither and arrives only after the BAMs have been read.
+
+      What the run *did* establish, on real data and on amd64: `PHAMB_DVF_TABLE` produces a
+      DeepVirFinder-format table with the expected `name/len/score/pvalue` header,
+      `GENEPRED4BIN` produces its proteins, and **the depth table is built and its row-count
+      assertion passes** — the [I-44](dev/KNOWN_ISSUES.md#i-44) fix, exercised on BAMs covering
+      161 contigs against a 102-sequence FASTA, which is the mismatch it exists to survive.
+      The CI job asserts exactly these, and that VAMB stops on the guard rather than anything
+      else.
+
+      Three failures had to be cleared before the path could start, none of them visible to any
+      static check: [I-56](dev/KNOWN_ISSUES.md#i-56), where neither HMM database could be built
+      and the guard turned both failures silent; [I-57](dev/KNOWN_ISSUES.md#i-57), where Docker
+      created a missing `--db` as root; and the entry script's location — Nextflow resolves
+      `bin/` relative to the directory holding it, so under `tests/` every process calling a
+      `bin/` script died with `command not found` while every stub test passed.
 
    A CI job is the right home for this even though it is not really a regression test: it is
    the only x86-64 machine available, it has 16 GB against the NAS's 7, and `--binning phamb`
@@ -662,10 +675,12 @@ On the vpfkit side, ordered the same way:
   the result. **VAMB has still never clustered real data**, and that is the open question, not
   the path as a whole. Note also the smoke test asserts the predictions file *exists*; the
   checklist asks for non-empty, which needs a real run.
-- **VAMB may be below its working size on this library.** It trains a VAE, and the reference
-  library is 161 contigs. Whether that is enough for it to produce meaningful bins is unknown
-  and is the first thing a real run will show. A documented lower bound is a legitimate
-  outcome here.
+- **VAMB cannot run on this library, and the bound is now measured.** It trains a VAE and
+  needs at least one batch — 256 contigs by default — against the 77 that pass
+  `--binning_minlen_contig` here. `VAMB` checks this itself and stops with both numbers. So
+  **no run of `--binning phamb` on this dataset has ever reached the binning step, and none
+  can**; whether PHAMB bins correctly remains untested, and testing it needs a library of a
+  few hundred viral contigs from somewhere else.
 - **PHAMB's bin calls are approximate by construction.** Its forest was fitted on
   DeepVirFinder's score distribution and is given geNomad's. The two scores share a range and
   a meaning but not a calibration, and the size of the disagreement has not been measured.

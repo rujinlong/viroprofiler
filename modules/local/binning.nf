@@ -63,6 +63,26 @@ process VAMB {
         exit 1
     fi
 
+    # VAMB trains a variational autoencoder, and refuses to start on a library
+    # smaller than one batch. Its default batch size is 256, and the check lives
+    # inside `make_dataloader`, so it raises
+    #
+    #     ValueError: Fewer sequences left after filtering than the batch size.
+    #
+    # only after the BAMs have been read and the depth table built -- and the
+    # message names neither VAMB's batch size nor the contig count, so it reads
+    # as a filtering bug. Say it here instead, with both numbers and a way out.
+    if [ "\$n_fasta" -lt 256 ]; then
+        echo "VAMB cannot bin this library: \$n_fasta contigs pass -m ${params.binning_minlen_contig}," >&2
+        echo "and it needs at least 256 -- one batch for the autoencoder it trains." >&2
+        echo "" >&2
+        echo "Options, in the order worth trying:" >&2
+        echo "  * --binning vrhyme, which has no such minimum and needs no VAMB" >&2
+        echo "  * a lower --binning_minlen_contig, if contigs are being excluded by length" >&2
+        echo "  * more samples: viral libraries this small are usually not worth binning" >&2
+        exit 1
+    fi
+
     vamb --outdir out_vamb --fasta $contigs -m $params.binning_minlen_contig \\
         --jgi depth_clean.txt -o __ --minfasta $params.binning_minlen_contig
     """

@@ -1,15 +1,27 @@
 name: PHAMB real run
 
-# The PHAMB binning path has never been executed. VAMB has no linux-aarch64 build,
-# so it cannot be run on the development machine at all, and the only x86-64 host on
-# that network has 7 GB of RAM. This runner is the machine that can.
+# Exercises the PHAMB path on x86-64, which is the only place it can run: VAMB has
+# no linux-aarch64 build, and the only x86-64 host on the development network has
+# 7 GB of RAM.
 #
-# It is not a regression test in the usual sense -- it answers an open question
-# (docs/HANDOFF.md, "Not done yet"): whether VAMB, which trains a VAE, can work on a
-# library of 161 contigs. A documented lower bound is a legitimate outcome. Treat a
-# failure here as information about the dataset until the log says otherwise.
+# It stops at VAMB, and that is the finding rather than a fault. VAMB trains a
+# variational autoencoder and needs at least one batch -- 256 contigs by default.
+# The reference run yields 161 contigs, 102 of them viral, 77 of those at or above
+# --binning_minlen_contig. No fixture drawn from it can reach 256, so **this
+# dataset cannot answer "does VAMB bin correctly"** and no amount of rearranging
+# it will. What the job does establish, on real data:
 #
-# Manual by default, plus the files that would invalidate the answer.
+#   * DB_VOGDB and DB_MICOMPLETEDB build and verify their databases (I-56)
+#   * a --db that does not exist yet is created correctly (I-57)
+#   * PHAMB_DVF_TABLE and GENEPRED4BIN run, on amd64
+#   * VAMB's depth table is built and its row-count assertion passes, which is
+#     the I-44 fix -- the BAMs cover 161 contigs and the FASTA 102
+#   * the size guard fires with a message naming both numbers and a way out
+#
+# Answering the binning question itself needs a library of a few hundred viral
+# contigs, which means a different dataset.
+#
+# Manual by default, plus the files that would invalidate any of the above.
 on:
   workflow_dispatch:
   push:
@@ -23,7 +35,7 @@ on:
 
 jobs:
   phamb:
-    name: VAMB + PHAMB_RF on the reference fixture
+    name: PHAMB path up to VAMB's size limit
     runs-on: ubuntu-latest
     timeout-minutes: 180
 
@@ -103,8 +115,11 @@ jobs:
           du -sh phamb_db/*
           df -h /
 
+      # Expected to fail, at VAMB, for the reason in the header. `|| true` would
+      # hide a failure anywhere else, so capture the log and assert on its content.
       - name: Run the PHAMB path
         run: |
+          set +e
           nextflow run phamb_entry.nf \
             -profile docker \
             --db "$PWD/phamb_db" \
@@ -112,32 +127,43 @@ jobs:
             --phamb_contigs assets/test_phamb/putative_vcontigs.fasta \
             --phamb_genomad assets/test_phamb/genomad_virus_summary.tsv \
             --phamb_bams 'assets/test_phamb/bams/*.bam' \
-            --max_cpus 4 --max_memory 12.GB
+            --max_cpus 4 --max_memory 12.GB > run.log 2>&1
+          echo "nextflow exit: $?"
+          set -e
+          tail -40 run.log
 
-      # The two checks docs/HANDOFF.md names for the first amd64 run, plus the
-      # cluster table they depend on. Non-empty is asserted rather than existence:
-      # run_RF.py writes the header regardless, so a file with one line means the
-      # forest classified nothing.
       - name: Check what came out
         run: |
-          set -x
+          echo "--- processes that produced output ---"
           find phamb_out -type f | sort
 
-          test -s phamb_out/vamb/clusters.tsv
-          echo "VAMB clusters: $(wc -l < phamb_out/vamb/clusters.tsv)"
+          # Everything upstream of VAMB has to have run.
+          test -s phamb_out/phamb/all.DVF.predictions.txt
+          head -1 phamb_out/phamb/all.DVF.predictions.txt | grep -qP '^name\tlen\tscore\tpvalue$'
+          echo "PHAMB_DVF_TABLE: $(( $(wc -l < phamb_out/phamb/all.DVF.predictions.txt) - 1 )) contigs scored"
 
-          PRED=phamb_out/phamb/vambbins_RF_predictions.txt
-          test -s "$PRED"
-          rows=$(( $(wc -l < "$PRED") - 1 ))
-          echo "RF predictions: $rows bins classified"
-          head -5 "$PRED"
-          if [ "$rows" -lt 1 ]; then
-              echo "::error::run_RF.py wrote only a header -- no bin was classified." >&2
-              echo "If VAMB produced clusters, this is a PHAMB failure. If it did not," >&2
-              echo "the library is likely below the size VAMB can work at, which is the" >&2
-              echo "open question this job exists to answer. Check the VAMB log first." >&2
+          test -s phamb_out/genepred4bin/genes_input4bin.faa
+          echo "GENEPRED4BIN: $(grep -c '^>' phamb_out/genepred4bin/genes_input4bin.faa) proteins"
+
+          # VAMB must fail on the size guard, not on anything else. Both halves
+          # matter: a different failure means something actually broke, and no
+          # failure means the guard stopped working.
+          if ! grep -q "VAMB cannot bin this library" run.log; then
+              echo "::error::VAMB did not stop on the size guard." >&2
+              echo "Either it got further than this dataset allows -- in which case" >&2
+              echo "the guard is broken -- or it failed for another reason entirely." >&2
+              grep -E "Error executing process|Caused by" -A3 run.log >&2 || true
               exit 1
           fi
+          grep -A5 "VAMB cannot bin this library" run.log
+
+          # And the depth table must have been built before the guard was reached:
+          # that is the I-44 fix, and the only place it runs on real BAMs.
+          if grep -qE "depth rows \([0-9]+\) != contigs passing" run.log; then
+              echo "::error::The depth table did not line up with the FASTA (I-44)." >&2
+              exit 1
+          fi
+          echo "Depth table built and row-count assertion passed."
 
       - name: Keep the logs whatever happened
         if: always()
@@ -146,6 +172,7 @@ jobs:
           name: phamb-run
           path: |
             phamb_out/
+            run.log
             .nextflow.log
           retention-days: 14
           if-no-files-found: warn
