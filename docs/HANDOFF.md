@@ -462,10 +462,15 @@ Ordered by how much they change results.
    So PHAMB is being taken to CI instead, in steps, because two questions have to be answered
    in order and the first is cheap:
 
-   1. **Do the images build on amd64?** Nothing in this repository ever has. `docker.yml` now
-      builds `viroprofiler-base` and `viroprofiler-binning` — the two the PHAMB path needs —
-      on every change under `docker/`, without pushing. Each Dockerfile ends in an `env -i`
-      smoke test, so a green build is a green smoke test.
+   1. **Do the images build on amd64?** **Answered: yes.** `docker.yml` builds
+      `viroprofiler-base` and `viroprofiler-binning` — the two the PHAMB path needs — on every
+      change under `docker/`, without pushing, and both pass. Since each Dockerfile ends in an
+      `env -i` smoke test, that also settles more of the checklist than a build normally
+      would: `vamb` is executable, `run_RF.py` resolves to the wrapper rather than the
+      shadowed copy, the random forest deserialises under the installed scikit-learn, and
+      `run_RF.py` writes a predictions file when run with real arguments. See
+      [Limits of what has been verified](#limits-of-what-has-been-verified) for the table and
+      for what those checks still do not cover.
    2. **Can VAMB work at this scale at all?** It trains a VAE, and the reference library is
       161 contigs. That may be below the size it can operate at, in which case the honest
       outcome is a documented lower bound rather than a passing test. Answering it needs a
@@ -583,11 +588,32 @@ On the vpfkit side, ordered the same way:
   would have kept it. Dereplication is therefore slightly incomplete for short contigs, in a
   bounded and now-quantified way, and lowering the prefilter threshold is the lever if it
   ever matters.
-- **Nothing has been built or run on amd64.** Every image was built natively on aarch64.
-- **`--binning phamb` has never been executed.** Its topology is exercised by the stub, the
-  score-table converter is checked against phamb's own parser, and the image asserts the
-  random forest deserialises — but VAMB has no aarch64 build, so the path itself has not run
-  end to end anywhere. Treat the first amd64 run as its first test.
+- **Two of the sixteen images now build on amd64; the other fourteen have never been tried.**
+  `viroprofiler-base` and `viroprofiler-binning` are built by
+  [`docker.yml`](../.github/workflows/docker.yml) on every change under `docker/`, and both
+  pass. Everything else was built natively on aarch64 and only there.
+- **`--binning phamb` has not been executed on real data, but more of it is verified than that
+  implies.** Because each Dockerfile ends in an `env -i` smoke test, the amd64 build of
+  `viroprofiler-binning` establishes, on x86-64:
+
+  | Check | Status |
+  |---|---|
+  | `vamb --help` runs — the binary exists and is executable on this arch | Passes |
+  | `command -v run_RF.py` is `/usr/local/bin/run_RF.py`, not the shadowed copy | Passes |
+  | `joblib.load()` deserialises `RF_model.python39.sav` under the installed scikit-learn | Passes |
+  | `run_RF.py` run with real arguments writes `vambbins_RF_predictions.txt` | Passes |
+  | `jgi_summarize_bam_contig_depths` is present | Passes |
+
+  So the two things the amd64 checklist named — that `run_RF.py` resolves to the wrapper and
+  that it produces a predictions file — are answered. What is not: that last row of the smoke
+  test uses one 32 bp contig and a hand-written cluster table, so it proves the plumbing, not
+  the result. **VAMB has still never clustered real data**, and that is the open question, not
+  the path as a whole. Note also the smoke test asserts the predictions file *exists*; the
+  checklist asks for non-empty, which needs a real run.
+- **VAMB may be below its working size on this library.** It trains a VAE, and the reference
+  library is 161 contigs. Whether that is enough for it to produce meaningful bins is unknown
+  and is the first thing a real run will show. A documented lower bound is a legitimate
+  outcome here.
 - **PHAMB's bin calls are approximate by construction.** Its forest was fitted on
   DeepVirFinder's score distribution and is given geNomad's. The two scores share a range and
   a meaning but not a calibration, and the size of the disagreement has not been measured.
