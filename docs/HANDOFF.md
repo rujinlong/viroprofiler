@@ -197,8 +197,16 @@ Databases live at `/mnt/scratch/db/viroprofiler`:
 | `dram` | 38 GB | local |
 | `vibrant` | 11 GB | local |
 | `vitap` | 1.3 GB | local |
+| `vogdb` | 4.4 GB | symlink into `~/data2/db` — 49116 profiles from vog236 |
+| `micomplete` | 6.5 MB | symlink into `~/data2/db` — 105 profiles |
 | `checkv`, `virsorter2`, `genomad`, `eggnog` | — | symlinks into `~/data2/db` |
 | `vcontact3`, `checkamg` | — | symlinks into `/mnt/nas26/db` |
+
+`vogdb` and `micomplete` are new, and are the two the PHAMB path needs. Neither had ever been
+built, and neither *could* have been: both `DB_*` processes failed for unrelated reasons and
+both failures were then hidden by a `[ -d ]` guard ([I-56](dev/KNOWN_ISSUES.md#i-56)). They
+are built now, with the fixed processes, and the numbers above are what those processes
+verified before publishing.
 
 The `taxonomy/` tree there — the MMseqs2 vRefSeq database and the 2022 NCBI taxdump, 3.4 GB —
 has no consumer any more and can be deleted.
@@ -488,12 +496,26 @@ Ordered by how much they change results.
       for what those checks still do not cover.
    2. **Can VAMB work at this scale at all?** It trains a VAE, and the reference library is
       161 contigs. That may be below the size it can operate at, in which case the honest
-      outcome is a documented lower bound rather than a passing test. Answering it needs a
-      fixture — `contigs_nrclib.fasta`, a few BAMs from
-      `viroprofiler_16sample/run_dram/mapping2contigs2/`, and `virus_genomad_summary.tsv`, all
-      of which exist — plus the two HMM databases, `micomplete` (small) and `vogdb` (~1 GB
-      over plain HTTP, [I-09](dev/KNOWN_ISSUES.md#i-09)), neither of which has ever been built
-      here.
+      outcome is a documented lower bound rather than a passing test.
+
+      The inputs are ready. The fixture exists in the reference run —
+      `contigs_nrclib.fasta`, BAMs under `viroprofiler_16sample/run_dram/mapping2contigs2/`,
+      and `virus_genomad_summary.tsv` — and both HMM databases are now built
+      ([I-56](dev/KNOWN_ISSUES.md#i-56) had to be fixed first; neither had ever been built,
+      and neither could have been).
+
+      Two things are left, and both are decisions rather than unknowns:
+
+      - **Where the fixture lives.** Roughly 7 MB: 2 MB of contigs plus four to six BAMs at
+        0.4–1.6 MB each. In `assets/` it is versioned with the code and git keeps it forever;
+        as a release asset it stays out of the history at the cost of a step that has to be
+        redone whenever the fixture changes.
+      - **How to reach the subworkflow.** `vMAG_PHAMB` takes three channels and is called
+        only from `VIROPROFILER`; `CONTIGANNO` has no binning path, so there is no existing
+        entry point that stops there. Either add a small `-entry` wrapper — worth having
+        because it also makes the path runnable by hand, not just in CI — or generate one
+        inside the workflow file, which keeps the repository unchanged but hides the wiring
+        in YAML.
 
    A CI job is the right home for this even though it is not really a regression test: it is
    the only x86-64 machine available, it has 16 GB against the NAS's 7, and `--binning phamb`
