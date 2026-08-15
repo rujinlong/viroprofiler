@@ -322,7 +322,12 @@ nextflow run main.nf -profile apptainer,arm64_local ...    # full command above
 [`.github/workflows/stub_test.yml`](../.github/workflows/stub_test.yml) runs 1 and 2 on every
 push, plus the SE, contig-annotation, setup and optional-module variants, plus the PHAMB path
 — the runner is x86-64, which makes CI the only place `--binning phamb` is exercised at all.
-[`docker.yml`](../.github/workflows/docker.yml) runs 3.
+[`docker.yml`](../.github/workflows/docker.yml) runs 3, and does so as of the first push that
+changed anything under `docker/`: until then it had never run at all. Its build job carried a
+`matrix.include` whose every entry was commented out, which YAML reads as `include: null`;
+GitHub rejects an empty matrix while *parsing*, so the file was invalid as a whole and took
+`check_locks` down with it, and it only fired on tags in the first place. Run 3 by hand until
+a green `check_locks` appears on a branch — the gate is only as real as its last run.
 
 A change that touches what `RESULTS_TSE` writes needs vpfkit's checks too:
 

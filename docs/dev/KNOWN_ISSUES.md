@@ -62,6 +62,7 @@ usability defect · **P3** hygiene.
 | [I-51](#i-51) | P1 | Config — `process.resourceLimits` above the `profiles` block ignores every profile | Fixed |
 | [I-52](#i-52) | P0 | Databases — `DB_VCONTACT3` cannot download: `curl` is not in the image | Fixed |
 | [I-53](#i-53) | P2 | Databases — a symlinked database that is not bind-mounted is silently re-downloaded | Open |
+| [I-54](#i-54) | P1 | CI — `docker.yml` was invalid YAML, so the lockfile gate never ran once | Fixed |
 
 ---
 
@@ -1390,3 +1391,36 @@ workaround, not the fix.
 
 Worth fixing by testing the path on the host side instead — a `when:` clause reading
 `file("${params.db}/checkv").exists()` — so that the guard sees what the user sees.
+
+---
+
+<a id="i-54"></a>
+## I-54
+
+**`docker.yml` was invalid YAML for GitHub, so the lockfile gate never ran once.** P1. Fixed.
+
+`PACKAGING.md`, `CLAUDE.md` and `HANDOFF.md` all describe `pixi lock --check --dry-run` as the
+CI gate that keeps an image's lockfile honest. It had never executed. Two independent faults,
+either of which alone was enough:
+
+1. The `push_to_registry` job's `matrix.include` had every entry commented out. YAML parses
+   that as `include: null`, and GitHub rejects an empty matrix *at parse time* — so the whole
+   workflow file was invalid, `check_locks` included, even though nothing was wrong with it.
+   The symptom is a run with `conclusion: failure` and an empty `jobs` array, which reads like
+   an infrastructure hiccup rather than a syntax error.
+2. `on:` listed only `push: tags: [v*, docker*]`. The images and their lockfiles are edited on
+   branches; by the time a tag exists, any drift is already released.
+
+Found by pushing `dev_ru` and noticing the failed run: `gh run list --workflow docker.yml`
+returned exactly one entry, that push, failed. Every earlier commit that touched `docker/`
+had gone through with no lockfile check at all.
+
+The job was removed rather than repaired, because restoring it is a larger piece of work than
+making the file valid — see `HANDOFF.md`, "Not done yet" item 3 — and its commented-out matrix
+is stale in its own right: ten images listed, sixteen present under `docker/`. `on:` now fires
+on pushes and pull requests that touch `docker/`. All fifteen lockfiles pass.
+
+The general shape is worth keeping in mind: **a CI gate that cannot be parsed fails in the
+same direction as one that passes.** Nothing goes red on the branch that broke it, the
+repository keeps documenting a guarantee it stopped providing, and the only way to notice is
+to ask when the check last actually ran.

@@ -1,10 +1,19 @@
 name: Docker
 
+# Runs on any change under docker/, not only on a tag. Firing on tags alone made the
+# lockfile gate below unreachable in practice: the images and their locks are edited on
+# branches, and by the time a tag exists the drift is already released.
 on:
   push:
-    tags:
-      - "v*"
-      - "docker*"
+    branches: [main, dev_ru]
+    paths:
+      - "docker/**"
+      - ".github/workflows/docker.yml"
+  pull_request:
+    paths:
+      - "docker/**"
+      - ".github/workflows/docker.yml"
+  workflow_dispatch:
 
 jobs:
   # The lockfiles are what make the images reproducible, so verify them on every push --
@@ -38,63 +47,15 @@ jobs:
           done
           exit $status
 
-  push_to_registry:
-    name: Push Docker image to Docker Hub
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # - dockerfile: ./docker/viroprofiler-base/Dockerfile
-          #   image: denglab/viroprofiler-base
-          # - dockerfile: ./docker/viroprofiler-binning/Dockerfile
-          #   image: denglab/viroprofiler-binning
-          # - dockerfile: ./docker/viroprofiler-geneannot/Dockerfile
-          #   image: denglab/viroprofiler-geneannot
-          # - dockerfile: ./docker/viroprofiler-host/Dockerfile
-          #   image: denglab/viroprofiler-host
-          # - dockerfile: ./docker/viroprofiler-replicyc/Dockerfile
-          #   image: denglab/viroprofiler-replicyc
-          # - dockerfile: ./docker/viroprofiler-vcontact3/Dockerfile
-          #   image: denglab/viroprofiler-vcontact3
-          # - dockerfile: ./docker/viroprofiler-abundance/Dockerfile
-          #   image: denglab/viroprofiler-abundance
-          # - dockerfile: ./docker/viroprofiler-vibrant/Dockerfile
-          #   image: denglab/viroprofiler-vibrant
-          # - dockerfile: ./docker/viroprofiler-bracken/Dockerfile
-          #   image: denglab/viroprofiler-bracken
-          # - dockerfile: ./docker/viroprofiler-virsorter2/Dockerfile
-          #   image: denglab/viroprofiler-virsorter2
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Check out the repo
-        uses: actions/checkout@v3
 
-      # Docker Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USER }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          images: ${{ matrix.image }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: "."
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+# The image build and push job lived here and has been removed: its `matrix.include` was
+# entirely commented out, which YAML reads as `include: null`. GitHub rejects an empty
+# matrix, and it rejects it at parse time -- so the whole file was invalid, `check_locks`
+# never ran once, and every push produced a failed run with no jobs in it. A gate that
+# cannot be parsed is worse than no gate, because the repository still claims to have one.
+#
+# To restore it (docs/HANDOFF.md, "Not done yet" item 3), recover the job from
+# `git log -- .github/workflows/docker.yml` and give the matrix a real list. Note the list
+# that was commented out is stale: it names ten images and docker/ now holds sixteen --
+# checkamg, genomad, qc, vclust, viewer and vitap were never added. Restoring it verbatim
+# would publish a subset while looking like a full build.
