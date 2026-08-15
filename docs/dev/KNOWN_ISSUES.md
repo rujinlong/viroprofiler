@@ -64,7 +64,7 @@ usability defect · **P3** hygiene.
 | [I-53](#i-53) | P2 | Databases — a symlinked database that is not bind-mounted is silently re-downloaded | Open |
 | [I-54](#i-54) | P1 | CI — `docker.yml` was invalid YAML, so the lockfile gate never ran once | Fixed |
 | [I-55](#i-55) | P2 | Modules — two of `ABUNDANCE`'s six CoverM passes feed nothing | Open |
-| [I-56](#i-56) | P0 | Databases — `DB_VOGDB` builds a 0-byte HMM library, and the guard then skips it | Fixed |
+| [I-56](#i-56) | P0 | Databases — neither PHAMB database could be built, and the guard hid both | Fixed |
 
 ---
 
@@ -1477,8 +1477,8 @@ it.
 <a id="i-56"></a>
 ## I-56
 
-**`DB_VOGDB` could not have succeeded since VOGDB nested its profiles, and the guard hid it.**
-P0. Fixed.
+**Neither PHAMB database could be built, and in both cases the guard turned the failure
+silent.** P0. Fixed.
 
 [I-30](#i-30) recorded that `vog.hmm.tar.gz` moved its profiles from the archive root into
 `hmm/`, and fixed the consequence for DRAM by making `process_vogdb()`'s glob recursive. The
@@ -1512,10 +1512,30 @@ and verifies the result by counting `HMMER3/` magic lines — the header every m
 library begins with, so a count is a parse: a 0-byte concatenation, a truncated download and
 an HTML error page all give zero. It publishes only above 1000 profiles (vog236 has ~49000).
 
-`DB_MICOMPLETEDB` was hardened in the same shape. It was not broken, but it created its
-target directory *before* downloading into it, so a failed transfer left a directory the
-guard would skip on the next run. It now verifies that `Bact105.hmm` contains exactly 105
-profiles — measured, and fixed by the pinned commit in its URL — before publishing.
+**`DB_MICOMPLETEDB` turned out to be broken too, independently, and identically.** Running the
+fixed VOGDB logic end to end surfaced it: the miComplete step produced a zero-byte
+`Bact105.hmm`. Bitbucket answers `wget` with **404** and `curl` with **200**, for the same
+URL, with or without a browser User-Agent:
+
+```
+$ wget -O w.hmm  https://bitbucket.org/.../Bact105.hmm   ->  ERROR 404: Not Found,  0 bytes
+$ curl -sSL -o c.hmm https://bitbucket.org/.../Bact105.hmm  ->  http=200, 6716478 bytes
+```
+
+So the same shape as VOGDB: the download fails, `wget -O` has already created the file, the
+directory the process made beforehand now exists, and the next run's `[ ! -d ]` guard skips it
+and reports success — leaving MICOMPLETEDB to hmmsearch an empty library.
+
+Both PHAMB databases were therefore unbuildable, by two unrelated causes with one signature.
+`DB_MICOMPLETEDB` now uses `curl -fsSL` — `-f` being what turns an HTTP error into a non-zero
+exit rather than an error page written to the output file — and verifies that `Bact105.hmm`
+holds exactly 105 profiles before publishing. `curl` is now declared in
+`docker/viroprofiler-base/pixi.toml` rather than relied on transitively, which is
+[I-17](#i-17)'s lesson; `pixi lock` reported the lockfile already up to date, so no package
+moved.
+
+Both databases have now been built with the fixed logic: vog236 gives 49116 profiles
+(4.4 GB), miComplete 105.
 
 Three lessons this repository already knew, all of which applied here:
 

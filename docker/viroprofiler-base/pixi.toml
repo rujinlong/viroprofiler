@@ -39,6 +39,7 @@ pandas = "*"
 biopython = "*"
 csvtk = "*"
 wget = "*"
+curl = "*"
 pigz = "*"
 coverm = "*"
 # Held at the version DB_VCONTACT3 verifies its databases with, so the release

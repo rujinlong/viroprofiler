@@ -824,7 +824,14 @@ process DB_MICOMPLETEDB {
     if check_db "\$MICOMPLETE"; then
         echo "Micomplete database already exists"
     else
-        wget -O Bact105.hmm "https://bitbucket.org/evolegiolab/micomplete/raw/165fea13201922f23fecb0e3c17e8e2cb07dae2d/micomplete/share/Bact105.hmm"
+        # curl, not wget: Bitbucket answers wget with 404 for this path and curl
+        # with 200, for the same URL, with or without a browser User-Agent. wget
+        # then leaves a zero-byte file behind, which is how this database came to
+        # look present and be empty.
+        #
+        # -f is what makes an HTTP error an error; without it curl writes the
+        # error page to the output file and exits 0.
+        curl -fsSL -o Bact105.hmm "https://bitbucket.org/evolegiolab/micomplete/raw/165fea13201922f23fecb0e3c17e8e2cb07dae2d/micomplete/share/Bact105.hmm"
         mkdir -p micomplete_build
         mv Bact105.hmm micomplete_build/Bact105.hmm
 
