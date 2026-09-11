@@ -21,3 +21,8 @@ docker/*/.pixi/
 # docs/HANDOFF.md, so anyone following it lands an untracked site/ here; the published
 # copy is built by CI onto gh-pages.
 site/
+
+# pm-cli local artifacts
+**/.claude/context/pm.sqlite.bak*
+**/.claude/context/pm-selfcheck.log*
+**/.claude/context/.pm-backup-*
