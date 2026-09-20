@@ -17,11 +17,9 @@ built at least once.
    `denglab/viroprofiler-*:v1.0.1` for every image, and `docker.yml` builds all sixteen on
    amd64 on every change under `docker/`, pushing them only from the main branch of
    `deng-lab/viroprofiler` — the one repository that holds the Docker Hub credentials.
-   Fifteen build. `viroprofiler-host` does not: it installs iPHoP from `rujinlong/iphop`,
-   which is private, and an anonymous runner cannot fetch it
-   ([I-59](dev/KNOWN_ISSUES.md#i-59)). Until that image exists on Docker Hub, an amd64 run
-   with the default `--use_iphop true` fails at `VIRALHOST_IPHOP`. Item 1 under
-   [Not done yet](#not-done-yet).
+   All sixteen are on Docker Hub as `v1.0.1`. `viroprofiler-host` needed one step outside
+   this repository first: the iPHoP fork it installs, `rujinlong/iphop`, was private and had
+   to be made public before a runner could fetch it ([I-59](dev/KNOWN_ISSUES.md#i-59)).
 2. **`create_vpftse_vir()` defaults to `rule = "candidate"`, and the reference object now
    says so.** `viroprofiler_output.rds` holds 102 contigs, rebuilt from the same run's
    all-contigs object; the 100-contig object built under the old default is kept beside it
@@ -33,14 +31,14 @@ built at least once.
    install vpfkit on amd64 ([I-58](dev/KNOWN_ISSUES.md#i-58)).
 4. **PHAMB has been executed for the first time**, on x86-64 in CI, and stops at VAMB for a
    measured reason: 77 contigs pass the length filter against a batch size of 256. That is
-   the dataset, not the code; the binning itself will be tested on a public dataset. Item 2
+   the dataset, not the code; the binning itself will be tested on a public dataset. Item 1
    under [Not done yet](#not-done-yet).
 
 **vpfkit is published.** vpfkit 0.6.0 and the fixes after it are on `main` in both
 `deng-lab/vpfkit` and `rujinlong/vpfkit`, and `docker/viroprofiler-viewer/Dockerfile` pins a
 SHA that `main` contains, so the viewer image can be built by anyone. On `dev_ru` the stub
-tests, `nextflow lint`, the lockfile gate, the amd64 image builds and the PHAMB run all run
-on every push; the `host` image build is the one red job until I-59 is settled.
+tests, `nextflow lint`, the lockfile gate, the sixteen amd64 image builds and the PHAMB run
+all run on every push, and all are green.
 
 **Branching.** `dev_ru` reaches `main` by `git merge --squash` with a short message, and
 `main` is then merged back into `dev_ru` so that the next squash carries only new work.
@@ -272,11 +270,6 @@ SIFs live in three directories, and which one you want depends on where the job 
 | `~/singularity/viroprofiler/` | The previous micromamba set, kept as a fallback. `viroprofiler-taxa.sif` there is a leftover of the retired vConTACT2 image and can be deleted |
 | `/mnt/nas26/singularity/viroprofiler-pixi/` | The same current set on shared storage. **This is what a Slurm job must point `--sif_dir` at.** `base` and `viewer` there are the 2026-09-20 rebuilds too |
 
-Two more directories under `/mnt/nas26/singularity/` are superseded: `viroprofiler-localtest/`
-(a viewer built from the local vpfkit tree, before the pin) and `viroprofiler-curltest/` (the
-`curl` rebuild of vConTACT3, the same bytes as the copy in the set above). Both are root-owned,
-so deleting them is a manual step.
-
 Every SIF in the NAS set except `vcontact3`, `base` and `viewer` is `root:root 0700`;
 `apptainer exec` on one of them from spark1 as an ordinary user fails with "not readable by
 the current user". The three readable ones were written by that user. Check with `ls -l`
@@ -436,8 +429,7 @@ push, plus the SE, contig-annotation, setup and optional-module variants, plus t
 [`docker.yml`](../.github/workflows/docker.yml) runs 3 as its `check_locks` job, checks that
 `conf/modules.config` names the tag it builds, and then builds every image on amd64 — on
 every change under `docker/`, on any branch. Check 0 is the `lint` job of `stub_test.yml`.
-The `host` image is red there until [I-59](dev/KNOWN_ISSUES.md#i-59) is settled; any other
-red job is new.
+A red job in either is new.
 
 A change that touches what `RESULTS_TSE` writes needs vpfkit's checks too:
 
@@ -475,8 +467,9 @@ Four things none of these can tell you, so check by hand:
   nothing; `grep -c 'vclust.* -t 4' work/*/*/.command.sh` does.
 - **Whether the viewer image contains the vpfkit you just changed.** It installs from GitHub
   at a pinned commit, so a local edit reaches `RESULTS_TSE` only after a push and a
-  `VPFKIT_REF` bump. Until then, build the image from the working tree — that is what
-  `denglab/viroprofiler-viewer:localtest` is, and why it is not a release artifact.
+  `VPFKIT_REF` bump. Until then, build the image with `VPFKIT_REPO` and `VPFKIT_REF`
+  pointing at the branch that has the edit, and tag it with a name no config file uses. Such
+  an image is a verification artifact and stays on the machine that built it.
 
 ## Verification discipline
 
@@ -559,23 +552,7 @@ to be declared in the manifest by name.
 
 Ordered by how much they change results.
 
-1. **Publish `viroprofiler-host`.** Fifteen of the sixteen images are built on amd64 by CI
-   and pushed from `deng-lab/viroprofiler` `main` as `v1.0.1`; this one fails before its first
-   layer. The Dockerfile fetches iPHoP from `https://github.com/rujinlong/iphop.git`, that
-   repository is private, and a runner has no credentials for it
-   ([I-59](dev/KNOWN_ISSUES.md#i-59)). Two ways out, and the choice is the repository owner's:
-   make the fork public, which also lets anyone rebuild the image a published tag points at;
-   or give the workflow a token — a repository secret passed to the build as a secret mount
-   and read by the `git fetch` step. Until one of them happens
-   `denglab/viroprofiler-host:v1.0.1` does not exist, the `host` job is the one red job on
-   every Docker run, and an amd64 run needs `--use_iphop false`. Once the fork is reachable,
-   a manual run of `docker.yml` on `deng-lab/viroprofiler` `main` with `push` ticked
-   publishes it.
-
-   The viewer image is no longer a special case: `VPFKIT_REF` points at a commit on
-   `deng-lab/vpfkit`'s `main`, the default `VPFKIT_REPO` builds it, and the reference object
-   was rebuilt inside exactly that image.
-2. **Run on amd64.** Two paths have no aarch64 execution route at all, so x86-64 is their only
+1. **Run on amd64.** Two paths have no aarch64 execution route at all, so x86-64 is their only
    real test. Both have moved since this item was written, and what is left of each is
    specific:
    - **`--binning phamb`** — the path now runs in CI as far as VAMB, which stops on a measured
@@ -587,8 +564,8 @@ Ordered by how much they change results.
    - **`--use_iphop`** — forced off in the arm64 profile, so `RESULTS_TSE` has only ever seen
      the placeholder. `DB_IPHOP` and `read_iphop()` have each been exercised elsewhere; see
      [Limits of what has been verified](#limits-of-what-has-been-verified). The HPC cluster is
-     where this one gets finished, once `denglab/viroprofiler-host:v1.0.1` exists (item 1);
-     the git tag `v1.0.1` waits for that run.
+     where this one gets finished, against the published `v1.0.1` images; the git tag
+     `v1.0.1` waits for that run.
 
    **No machine on this network can host that run.** Both Sparks are aarch64, and so is the
    m21 workstation (Darwin arm64). The only x86-64 host reachable here is the NAS, `naspark` —
@@ -600,9 +577,9 @@ Ordered by how much they change results.
    in order and the first is cheap:
 
    1. **Do the images build on amd64?** **Answered: yes.** `docker.yml` builds all sixteen on
-      every change under `docker/`; fifteen pass, and the sixteenth is item 1 above, not a
-      build defect. `viroprofiler-base` and `viroprofiler-binning` — the two the PHAMB path
-      needs — are among the fifteen. Since each Dockerfile ends in an
+      every change under `docker/`, and all sixteen pass, `viroprofiler-base` and
+      `viroprofiler-binning` — the two the PHAMB path needs — among them. Since each
+      Dockerfile ends in an
       `env -i` smoke test, that also settles more of the checklist than a build normally
       would: `vamb` is executable, `run_RF.py` resolves to the wrapper rather than the
       shadowed copy, the random forest deserialises under the installed scikit-learn, and
@@ -645,16 +622,14 @@ Ordered by how much they change results.
    A CI job is the right home for this even though it is not really a regression test: it is
    the only x86-64 machine available, it has 16 GB against the NAS's 7, and `--binning phamb`
    is already the one path CI alone exercises, in stub form.
-3. **Give the viewer something to say about iPHoP.** Host prediction is still the one
+2. **Give the viewer something to say about iPHoP.** Host prediction is still the one
    annotation family whose slot in `RESULTS_TSE` has never held a real file, because iPHoP has
    no aarch64 build. The reader is no longer the unknown part of that — `read_iphop()` has now
    parsed a real 13,379-row iPHoP table from p0075 — so what is left is an end-to-end run that
-   puts one through `create_tse.r` and into the viewer. The HPC cluster can do it, after
-   item 1.
-4. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md): database setup steps that
-   are not resumable (I-10), the vendored nf-core modules pinned to 2022 releases (I-19), a
-   symlinked database that is silently re-downloaded when not bind-mounted (I-53), and the
-   private iPHoP fork (I-59).
+   puts one through `create_tse.r` and into the viewer. The HPC cluster can do it.
+3. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md): database setup steps that
+   are not resumable (I-10), the vendored nf-core modules pinned to 2022 releases (I-19), and a
+   symlinked database that is silently re-downloaded when not bind-mounted (I-53).
 
 On the vpfkit side, ordered the same way. **Item 1 is settled and kept here for its
 reasoning**, because it is the one change in this list that moves a result; items 2 onwards are
@@ -790,12 +765,11 @@ open.
   would have kept it. Dereplication is therefore slightly incomplete for short contigs, in a
   bounded and now-quantified way, and lowering the prefilter threshold is the lever if it
   ever matters.
-- **Fifteen of the sixteen images build on amd64 in CI; `viroprofiler-host` has never been
-  built there.** [`docker.yml`](../.github/workflows/docker.yml) builds all sixteen on every
-  change under `docker/`. The fifteen pass their `env -i` smoke tests on x86-64; `host` cannot
-  start, because the iPHoP fork it installs is private ([I-59](dev/KNOWN_ISSUES.md#i-59)).
-  Building is not running: apart from the PHAMB path, no amd64 image has executed a real
-  process yet. That is what the HPC iPHoP run is for.
+- **All sixteen images build on amd64 in CI and are on Docker Hub as `v1.0.1`.**
+  [`docker.yml`](../.github/workflows/docker.yml) builds them on every change under `docker/`,
+  and each passes the `env -i` smoke test its Dockerfile ends with. Building is not running:
+  apart from the PHAMB path, no amd64 image has executed a real process yet. That is what the
+  HPC iPHoP run is for.
 - **`--binning phamb` has not been executed on real data, but more of it is verified than that
   implies.** Because each Dockerfile ends in an `env -i` smoke test, the amd64 build of
   `viroprofiler-binning` establishes, on x86-64:

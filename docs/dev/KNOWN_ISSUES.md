@@ -67,7 +67,7 @@ usability defect · **P3** hygiene.
 | [I-56](#i-56) | P0 | Databases — neither PHAMB database could be built, and the guard hid both | Fixed |
 | [I-57](#i-57) | P1 | Config — Docker creates a missing `--db` as root, so setup cannot write to it | Fixed |
 | [I-58](#i-58) | P0 | Containers — the viewer image could not install vpfkit on amd64: `here` undeclared, present on aarch64 only transitively | Fixed |
-| [I-59](#i-59) | P1 | Containers — `viroprofiler-host` cannot be built by CI: the iPHoP fork it installs is private | Open — owner's decision |
+| [I-59](#i-59) | P1 | Containers — `viroprofiler-host` could not be built by CI: the iPHoP fork it installs was private | Fixed — the fork is public, the image is published |
 
 ---
 
@@ -1654,12 +1654,12 @@ choice away from disappearing.
 <a id="i-59"></a>
 ## I-59
 
-**`viroprofiler-host` cannot be built by CI: the iPHoP fork it installs is private.** P1.
-Open — the fix is a decision about a repository, not a code change here.
+**`viroprofiler-host` could not be built by CI: the iPHoP fork it installs was private.** P1.
+Fixed on 2026-09-20 by making the fork public; the image was published the same day.
 
 The Dockerfile fetches iPHoP from `https://github.com/rujinlong/iphop.git` at a pinned ref,
 because the bioconda package carries three defects the fork repairs ([I-27](#i-27)). That
-repository is private. An unauthenticated GitHub Actions runner gets
+repository was private. An unauthenticated GitHub Actions runner got
 
 ```
 fatal: could not read Username for 'https://github.com': No such device or address
@@ -1668,18 +1668,14 @@ fatal: could not read Username for 'https://github.com': No such device or addre
 on the first `git fetch`, before any layer of the image exists. The image on Docker Hub,
 `denglab/viroprofiler-host:v0.2.6`, dates from 2024-06 and predates the fork entirely.
 
-Consequences while this stands: `denglab/viroprofiler-host:v1.0.1` is the one tag
-`conf/modules.config` names that Docker Hub does not have, the `host` job is red on every
-Docker workflow run, and an amd64 run with the default `--use_iphop true` fails at
-`VIRALHOST_IPHOP`. `--use_iphop false` avoids it at the cost of host prediction.
+While it stood, `denglab/viroprofiler-host:v1.0.1` was the one tag `conf/modules.config`
+named that Docker Hub did not have, the `host` job was red on every Docker workflow run, and
+an amd64 run with the default `--use_iphop true` would have failed at `VIRALHOST_IPHOP`.
 
-Two ways to close it:
-
-- **Make `rujinlong/iphop` public.** The simplest, and the one that also lets anyone rebuild
-  the image a published tag was made from, which is what the `org.opencontainers.image.source`
-  label on it promises.
-- **Give the workflow a token.** A repository secret holding a fine-grained token with read
-  access to the fork, passed to `docker/build-push-action` as a `secrets:` entry and read by
-  the fetch step with `--mount=type=secret`. The image then builds, but nobody outside the
-  organization can reproduce it.
+Closed by making `rujinlong/iphop` public, which also lets anyone rebuild the image a
+published tag was made from — what the `org.opencontainers.image.source` label on it
+promises. The alternative, a fine-grained token in a repository secret passed to the build as
+a secret mount, would have built the image while leaving it reproducible by nobody outside the
+organization. After the change a manual run of `docker.yml` on `deng-lab/viroprofiler` `main`
+with `push` ticked built and pushed the image.
 
