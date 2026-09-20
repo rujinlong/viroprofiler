@@ -3,7 +3,7 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## v1.0.1 - 2026-08-14
+## v1.0.1 - unreleased
 
 The first release since the published version, and a large one: geNomad replaces
 DeepVirFinder, Vclust replaces the all-vs-all BLAST recipe, VITAP and vConTACT3 supply
@@ -53,6 +53,18 @@ and aarch64 is supported. **Requires Nextflow 26.04 or newer.**
 
 ### Changed
 
+- Every container image is published under one tag, `v1.0.1`, built on amd64 from the
+  committed lockfiles by `.github/workflows/docker.yml` on the main branch of
+  `deng-lab/viroprofiler`. The tags `conf/modules.config` named before (`v0.1`–`v0.3`,
+  `v0.2.5`, `v0.2.6`) either predate the pixi migration or were never pushed
+- `viroprofiler-base` no longer carries a `virsorter2` environment. Nothing in the image
+  read it -- every process that runs VirSorter2 uses `viroprofiler-virsorter2` -- and it
+  weighed about 1 GB
+- `create_vpftse_vir()` in vpfkit defaults to `rule = "candidate"`: the viral set is the
+  pipeline's own candidate list, the set every downstream stage was computed on, rather
+  than the union of the detector votes. On the sixteen-sample reference run that is 102
+  contigs instead of 100, two gained and none lost. The votes are still stored in
+  `rowData` as diagnostics
 - The config and the workflow scripts are written in Nextflow's strict language, which
   26.04 makes the default parser. Runs no longer need `NXF_SYNTAX_PARSER=v1`, and must not
   set it: the legacy parser rejects `env()` in the params block

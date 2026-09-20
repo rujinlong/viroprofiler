@@ -225,5 +225,10 @@ Every known defect with its status: [docs/dev/KNOWN_ISSUES.md](docs/dev/KNOWN_IS
 
 ## Branch Strategy
 
-- `main` — stable releases only, no direct development
-- `dev_ru` — unified development branch, rebase onto main periodically
+- `main` — stable releases only, no direct development. Pushing to it on
+  `deng-lab/viroprofiler` publishes the images: `docker.yml` pushes to Docker Hub from
+  that branch and nowhere else
+- `dev_ru` — unified development branch. It reaches `main` by `git merge --squash`, with a
+  short commit message; after each squash, merge `main` back into `dev_ru` (a no-op merge
+  commit) so that the next squash carries only the new work. Never rebase `dev_ru` onto a
+  squash commit: every replayed commit conflicts with the squash of itself

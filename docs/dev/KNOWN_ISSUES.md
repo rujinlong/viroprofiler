@@ -66,6 +66,8 @@ usability defect · **P3** hygiene.
 | [I-55](#i-55) | P2 | Modules — two of `ABUNDANCE`'s six CoverM passes feed no downstream process | Closed — kept as published side products, by decision |
 | [I-56](#i-56) | P0 | Databases — neither PHAMB database could be built, and the guard hid both | Fixed |
 | [I-57](#i-57) | P1 | Config — Docker creates a missing `--db` as root, so setup cannot write to it | Fixed |
+| [I-58](#i-58) | P0 | Containers — the viewer image could not install vpfkit on amd64: `here` undeclared, present on aarch64 only transitively | Fixed |
+| [I-59](#i-59) | P1 | Containers — `viroprofiler-host` cannot be built by CI: the iPHoP fork it installs is private | Open — owner's decision |
 
 ---
 
@@ -1618,3 +1620,66 @@ stage, which does not go through `SETUP`.
 
 Found by running the PHAMB path in CI for the first time, which is also the first time this
 repository ran `--mode setup` under Docker rather than Apptainer.
+
+---
+
+<a id="i-58"></a>
+## I-58
+
+**The viewer image could not install vpfkit on amd64, because `here` was never declared.**
+P0 on that platform. Fixed.
+
+The first amd64 build of `viroprofiler-viewer`, in CI, died in the `install_github()` layer:
+
+```
+ERROR: dependency 'here' is not available for package 'vpfkit'
+```
+
+vpfkit imports `here` and has since 0.6.0. The image's `pixi.toml` never listed it, and the
+aarch64 builds on the development machine passed anyway: their solve picked `r-golem` 0.5.1,
+which depends on `r-here`, so the package arrived as a side effect. The linux-64 half of the
+same lockfile resolves `r-golem` 1.0.1, which dropped that dependency, and the side effect
+with it. One lockfile, two platforms, two different package sets — 381 packages against 352,
+R 4.5 against R 4.3 — and a dependency that one of them had only by accident.
+
+Fixed by declaring `r-here` in `docker/viroprofiler-viewer/pixi.toml`. The re-lock adds
+exactly one package on linux-64 and changes nothing on linux-aarch64, so the local SIF built
+before the fix is the same image as the one the lock now describes.
+
+The general rule this leaves behind: every package vpfkit imports must be declared in the
+manifest by name. `install_github(dependencies = FALSE)` installs nothing on its own, and a
+dependency that is present only through another package's dependency list is one solver
+choice away from disappearing.
+
+<a id="i-59"></a>
+## I-59
+
+**`viroprofiler-host` cannot be built by CI: the iPHoP fork it installs is private.** P1.
+Open — the fix is a decision about a repository, not a code change here.
+
+The Dockerfile fetches iPHoP from `https://github.com/rujinlong/iphop.git` at a pinned ref,
+because the bioconda package carries three defects the fork repairs ([I-27](#i-27)). That
+repository is private. An unauthenticated GitHub Actions runner gets
+
+```
+fatal: could not read Username for 'https://github.com': No such device or address
+```
+
+on the first `git fetch`, before any layer of the image exists. The image on Docker Hub,
+`denglab/viroprofiler-host:v0.2.6`, dates from 2024-06 and predates the fork entirely.
+
+Consequences while this stands: `denglab/viroprofiler-host:v1.0.1` is the one tag
+`conf/modules.config` names that Docker Hub does not have, the `host` job is red on every
+Docker workflow run, and an amd64 run with the default `--use_iphop true` fails at
+`VIRALHOST_IPHOP`. `--use_iphop false` avoids it at the cost of host prediction.
+
+Two ways to close it:
+
+- **Make `rujinlong/iphop` public.** The simplest, and the one that also lets anyone rebuild
+  the image a published tag was made from, which is what the `org.opencontainers.image.source`
+  label on it promises.
+- **Give the workflow a token.** A repository secret holding a fine-grained token with read
+  access to the fork, passed to `docker/build-push-action` as a `secrets:` entry and read by
+  the fetch step with `--mount=type=secret`. The image then builds, but nobody outside the
+  organization can reproduce it.
+

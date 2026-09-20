@@ -11,29 +11,41 @@ The pipeline is at 1.0.1 and works. It parses under the default parser of Nextfl
 sixteen-sample reference run reproduces to `max |diff| = 0`, and every database path has been
 built at least once.
 
-**Three things changed the day this was last edited, and the first one changes results:**
+**What changed most recently, in the order it matters to a user:**
 
-1. **`create_vpftse_vir()` defaults to `rule = "candidate"`.** The viral set comes from the
-   pipeline's candidate list, not the OR of the detector votes: 102 contigs on the reference
-   run instead of 100. The stored reference `.rds` files were *not* regenerated — see
-   [Where the pipeline stands](#where-the-pipeline-stands) for how to get the new object from
-   the old one.
-2. **PHAMB has been executed for the first time**, on x86-64 in CI, and stops at VAMB for a
+1. **The images are published from CI, under one tag.** `conf/modules.config` names
+   `denglab/viroprofiler-*:v1.0.1` for every image, and `docker.yml` builds all sixteen on
+   amd64 on every change under `docker/`, pushing them only from the main branch of
+   `deng-lab/viroprofiler` — the one repository that holds the Docker Hub credentials.
+   Fifteen build. `viroprofiler-host` does not: it installs iPHoP from `rujinlong/iphop`,
+   which is private, and an anonymous runner cannot fetch it
+   ([I-59](dev/KNOWN_ISSUES.md#i-59)). Until that image exists on Docker Hub, an amd64 run
+   with the default `--use_iphop true` fails at `VIRALHOST_IPHOP`. Item 1 under
+   [Not done yet](#not-done-yet).
+2. **`create_vpftse_vir()` defaults to `rule = "candidate"`, and the reference object now
+   says so.** `viroprofiler_output.rds` holds 102 contigs, rebuilt from the same run's
+   all-contigs object; the 100-contig object built under the old default is kept beside it
+   as `viroprofiler_output_rule-vote.rds`.
+   [Where the pipeline stands](#where-the-pipeline-stands) has the comparison.
+3. **`viroprofiler-base` lost its unused `virsorter2` environment**, about 1 GB. The base
+   and checkv environments are locked to exactly the same packages as before, on both
+   platforms. The viewer image gained an explicit `r-here`, without which it could not
+   install vpfkit on amd64 ([I-58](dev/KNOWN_ISSUES.md#i-58)).
+4. **PHAMB has been executed for the first time**, on x86-64 in CI, and stops at VAMB for a
    measured reason: 77 contigs pass the length filter against a batch size of 256. That is
-   the dataset, not the code. Item 2 under [Not done yet](#not-done-yet) has the detail.
-3. **Two databases that could never have been built now build.** `DB_VOGDB` and
-   `DB_MICOMPLETEDB` were both broken, by unrelated causes, and a `[ -d ]` guard turned both
-   failures silent ([I-56](dev/KNOWN_ISSUES.md#i-56)).
+   the dataset, not the code; the binning itself will be tested on a public dataset. Item 2
+   under [Not done yet](#not-done-yet).
 
-**vpfkit is published; the images are not.** vpfkit 0.6.0 and the fixes after it are on `main`
-in both `deng-lab/vpfkit` and `rujinlong/vpfkit`, so
-`docker/viroprofiler-viewer/Dockerfile` now pins a SHA that a branch actually contains and the
-viewer image can be built by anyone. `dev_ru` is pushed too, and its CI — stub tests, the
-lockfile gate, the amd64 image builds and the PHAMB run — is green.
+**vpfkit is published.** vpfkit 0.6.0 and the fixes after it are on `main` in both
+`deng-lab/vpfkit` and `rujinlong/vpfkit`, and `docker/viroprofiler-viewer/Dockerfile` pins a
+SHA that `main` contains, so the viewer image can be built by anyone. On `dev_ru` the stub
+tests, `nextflow lint`, the lockfile gate, the amd64 image builds and the PHAMB run all run
+on every push; the `host` image build is the one red job until I-59 is settled.
 
-What still blocks every other user is item 1 under [Not done yet](#not-done-yet):
-`conf/modules.config` names image tags that exist only as local SIFs on this machine, so every
-profile except `arm64_local` is broken.
+**Branching.** `dev_ru` reaches `main` by `git merge --squash` with a short message, and
+`main` is then merged back into `dev_ru` so that the next squash carries only new work.
+Never rebase `dev_ru` onto a squash commit. A push to `main` on `deng-lab/viroprofiler`
+publishes the images.
 
 **Pin vpfkit by a SHA that is reachable from a branch.** The pin held `efa71660` for a while,
 which was the tip of vpfkit's `dev` — and `dev` was squash-merged rather than fast-forwarded,
@@ -68,19 +80,29 @@ no aarch64 build:
 Anything that changes those numbers is a result change and needs explaining. Reproduce with
 the command under [Running it on this machine](#running-it-on-this-machine).
 
-**One such change is already in: `create_vpftse_vir()` now defaults to
-`rule = "candidate"`.** The viral set is taken from the pipeline's own candidate list rather
-than from the OR of the detector votes, which on this run means 102 contigs instead of 100 —
-two gained, none lost. The reasoning and the second-dataset measurement behind it are under
-[Not done yet](#not-done-yet).
+**One such change is in: `create_vpftse_vir()` defaults to `rule = "candidate"`.** The viral
+set is taken from the pipeline's own candidate list rather than from the OR of the detector
+votes, which on this run means 102 contigs instead of 100 — two gained, none lost. The
+reasoning and the second-dataset measurement behind it are under [Not done yet](#not-done-yet).
 
-**The stored reference objects have not been regenerated**, so
-`viroprofiler_output.rds` still holds the 100-contig subset built under the old default. That
-is deliberate — they are the evidence for the strict-syntax comparison and should not be
-rewritten by an unrelated change — but it means a fresh run and the stored object now differ
-by exactly those two contigs. Recompute rather than re-derive:
-`create_vpftse_vir(readRDS(".../viroprofiler_output_all_contigs.rds"), reannotate = TRUE)`
-gives the 102-contig object from the same run.
+**The stored reference object has been rebuilt under that default**, from the same run's
+all-contigs object and inside the viewer image that pins vpfkit `7307a80`:
+`create_vpftse_vir(readRDS(".../viroprofiler_output_all_contigs.rds"), reannotate = TRUE)`.
+Against the object it replaced, kept beside it as `viroprofiler_output_rule-vote.rds`:
+
+| | `rule = "vote"` (old) | `rule = "candidate"` (now) |
+|---|---|---|
+| Contigs | 100 | 102; `metadata()$viral_selection$n_union` records 100 |
+| Gained | — | `HT24__NODE_42_length_5482_cov_4.224618`, `UC29__NODE_26_length_3101_cov_8.606369`, both `viral_vote_n = 0` |
+| Lost | — | none |
+| Four assays, on the 100 shared contigs | | `max |diff| = 0` |
+| `rowData` columns | 55 | 55 |
+| `colData` | | identical once aligned on `sample_name` |
+| Gene annotations in `metadata()` | 3511 | 3511 |
+
+The new file is a tenth the size of the old one because `saveRDS()` gzips by default and the
+old objects were written uncompressed; `object.size()` is 1.9 MB for both. The two
+strict-syntax regression runs under `run_nf2*/` are untouched.
 
 The strict-syntax migration was checked against this run rather than assumed harmless: the
 same sixteen samples, from a `sbatch --export=NIL` job with `NXF_SYNTAX_PARSER` unset — the
@@ -242,20 +264,23 @@ verified before publishing.
 The `taxonomy/` tree there — the MMseqs2 vRefSeq database and the 2022 NCBI taxdump, 3.4 GB —
 has no consumer any more and can be deleted.
 
-SIFs live in five directories, and which one you want depends on where the job runs:
+SIFs live in three directories, and which one you want depends on where the job runs:
 
 | Directory | What it holds |
 |---|---|
-| `~/singularity/viroprofiler-pixi/` | The current pixi-built set. **spark1 only** — `~/singularity` is node-local |
+| `~/singularity/viroprofiler-pixi/` | The current pixi-built set. **spark1 only** — `~/singularity` is node-local. `base` and `viewer` were rebuilt on 2026-09-20 from the current Dockerfiles (no `virsorter2` environment; vpfkit at the pinned `7307a80`), and `vcontact3` is the `curl`-carrying build ([I-52](dev/KNOWN_ISSUES.md#i-52)) |
 | `~/singularity/viroprofiler/` | The previous micromamba set, kept as a fallback. `viroprofiler-taxa.sif` there is a leftover of the retired vConTACT2 image and can be deleted |
-| `/mnt/nas26/singularity/viroprofiler-pixi/` | The same current set on shared storage. **This is what a Slurm job must point `--sif_dir` at** |
-| `/mnt/nas26/singularity/viroprofiler-localtest/` | Only `viroprofiler-viewer.sif`, built from the local vpfkit tree. The reference runs overlay it on the set above |
-| `/mnt/nas26/singularity/viroprofiler-curltest/` | Only `viroprofiler-vcontact3.sif`, rebuilt with `curl` ([I-52](dev/KNOWN_ISSUES.md#i-52)) |
+| `/mnt/nas26/singularity/viroprofiler-pixi/` | The same current set on shared storage. **This is what a Slurm job must point `--sif_dir` at.** `base` and `viewer` there are the 2026-09-20 rebuilds too |
 
-The last one is the one to remember: **the vConTACT3 image in every other directory still
-lacks `curl`**, so `--mode setup` cannot build that database with it. The manifest and lock
-are fixed in the repository; folding the rebuilt image into the main set, or publishing it,
-is part of item 2 under [Not done yet](#not-done-yet).
+Two more directories under `/mnt/nas26/singularity/` are superseded: `viroprofiler-localtest/`
+(a viewer built from the local vpfkit tree, before the pin) and `viroprofiler-curltest/` (the
+`curl` rebuild of vConTACT3, the same bytes as the copy in the set above). Both are root-owned,
+so deleting them is a manual step.
+
+Every SIF in the NAS set except `vcontact3`, `base` and `viewer` is `root:root 0700`;
+`apptainer exec` on one of them from spark1 as an ordinary user fails with "not readable by
+the current user". The three readable ones were written by that user. Check with `ls -l`
+before pointing a job there.
 
 `bash docker/build_arm64.sh <name>` rebuilds one image; `SIF_DIR=<path>` chooses where the
 SIFs go, and defaults to `~/singularity/viroprofiler`. Once the pixi images have been used
@@ -311,19 +336,23 @@ Three parts of that interface are worth knowing before changing either side:
 
 `devtools::test()` and `devtools::check()` pass on this machine, and that is the state this
 pipeline depends on: `RESULTS_TSE` runs vpfkit on Linux, inside the viewer image, at the
-release version of R. vpfkit's CI now gates on three cells, all green:
-`ubuntu-latest` at `release` and `devel`, and `macos-latest` at `release`.
+release version of R. vpfkit's CI gates on four cells: `ubuntu-latest` at `release` and
+`devel`, `macos-latest` at `release`, and — since vpfkit `a11924f` — `windows-latest` at
+`release`, which passed on its first run back.
 
-Two cells were removed from that matrix rather than fixed. **Neither platform is disowned —
-they are simply not gated on here**, and both failures are recorded because they are still
-real:
+One cell is absent from that matrix rather than fixed. **The platform is not disowned — it is
+simply not gated on here**, and the failure is recorded because it is still real:
 
 | Cell | Why it is not in CI |
 |---|---|
-| `windows-latest (release)` | `test-fct_export.R` and `test-fct_report.R` both assert that a writer returns the path it was handed, and Windows normalizes it. A genuine portability defect in vpfkit, worth fixing on its own account; nothing this pipeline reaches, since the viewer image is Linux |
 | `ubuntu-latest (oldrel-1)` | Fails before reaching vpfkit at all: `mia` will not build against the current `rbiom` — `object 'unifrac' is not exported by 'namespace:rbiom'`. Upstream, and not ours to pin |
 
-The reason for removing rather than tolerating them: **a permanently red cell is worse than an
+The Windows cell used to be a second row: `test-fct_export.R` and `test-fct_report.R` assert
+that a writer returns the path it was handed, and `vpf_prepare_outfile()` rewrote any path not
+starting with `/` — which on Windows is every path — under `normalizePath()`. It now recognizes
+a drive letter or a UNC prefix as absolute.
+
+The reason for removing rather than tolerating a cell: **a permanently red cell is worse than an
 absent one**, because it trains everyone to ignore the badge. That is how three assertions
 matching the literal string `R version` — which R devel does not produce — survived, and how a
 merge that broke the two cells that *had* been green went in against a PR showing no checks at
@@ -399,12 +428,11 @@ that are deliberate are described in [`assets/test_phamb/README.md`](../assets/t
 [`.github/workflows/stub_test.yml`](../.github/workflows/stub_test.yml) runs 1 and 2 on every
 push, plus the SE, contig-annotation, setup and optional-module variants, plus the PHAMB path
 — the runner is x86-64, which makes CI the only place `--binning phamb` is exercised at all.
-[`docker.yml`](../.github/workflows/docker.yml) runs 3, and does so as of the first push that
-changed anything under `docker/`: until then it had never run at all. Its build job carried a
-`matrix.include` whose every entry was commented out, which YAML reads as `include: null`;
-GitHub rejects an empty matrix while *parsing*, so the file was invalid as a whole and took
-`check_locks` down with it, and it only fired on tags in the first place. Run 3 by hand until
-a green `check_locks` appears on a branch — the gate is only as real as its last run.
+[`docker.yml`](../.github/workflows/docker.yml) runs 3 as its `check_locks` job, checks that
+`conf/modules.config` names the tag it builds, and then builds every image on amd64 — on
+every change under `docker/`, on any branch. Check 0 is the `lint` job of `stub_test.yml`.
+The `host` image is red there until [I-59](dev/KNOWN_ISSUES.md#i-59) is settled; any other
+red job is new.
 
 A change that touches what `RESULTS_TSE` writes needs vpfkit's checks too:
 
@@ -504,23 +532,44 @@ the failure mode it exists to prevent. In CI gate on `pixi lock --check --dry-ru
 checkout, and it is amd64-only in any case. Reasoning and per-image notes:
 [PACKAGING.md](dev/PACKAGING.md).
 
+**Publishing.** [`docker.yml`](../.github/workflows/docker.yml) builds all sixteen images on
+amd64 whenever anything under `docker/`, `conf/modules.config` or the workflow itself
+changes, on `main`, `dev_ru` and pull requests. It pushes only when the repository is
+`deng-lab/viroprofiler` and the branch is `main`, or on a manual run there with `push`
+ticked, because that is where the Docker Hub credentials live. One tag for every image,
+`IMAGE_TAG` at the top of the workflow, and a `check_tags` job that fails when
+`conf/modules.config` names anything else. Bump the tag rather than overwrite it: a site that
+has `v1.0.1` cached keeps running it whatever Docker Hub holds under that name later.
+`provenance: false` keeps each tag a plain single-platform image, which is what Apptainer
+expects to pull.
+
+The published images are amd64 only; aarch64 hosts build their own with
+`docker/build_arm64.sh` ([ARM64.md](dev/ARM64.md)). The two platforms do not resolve the same
+package set from one lockfile: the viewer's linux-64 solve has R 4.5 with golem 1.0.1, its
+linux-aarch64 solve R 4.3 with golem 0.5.1, and that is how `here` came to be present on one
+and absent on the other ([I-58](dev/KNOWN_ISSUES.md#i-58)). Every package vpfkit imports has
+to be declared in the manifest by name.
+
 ## Not done yet
 
 Ordered by how much they change results.
 
-1. **Push the images to Docker Hub.** `conf/modules.config` references tags that exist only as
-   local SIFs — `vcontact3`, `vclust`, `vitap`, `genomad`, `checkamg` were never published,
-   and every other image now differs in content from the tag it names — so every profile other
-   than `arm64_local` is currently broken. This is the last step before anyone else can run
-   the pipeline. Bump the tags rather than overwriting: an image built from a lockfile and one
-   built from a loose environment file are not the same artifact, and reusing `v0.2`/`v0.3`
-   would leave existing installations silently on the old one.
+1. **Publish `viroprofiler-host`.** Fifteen of the sixteen images are built on amd64 by CI
+   and pushed from `deng-lab/viroprofiler` `main` as `v1.0.1`; this one fails before its first
+   layer. The Dockerfile fetches iPHoP from `https://github.com/rujinlong/iphop.git`, that
+   repository is private, and a runner has no credentials for it
+   ([I-59](dev/KNOWN_ISSUES.md#i-59)). Two ways out, and the choice is the repository owner's:
+   make the fork public, which also lets anyone rebuild the image a published tag points at;
+   or give the workflow a token — a repository secret passed to the build as a secret mount
+   and read by the `git fetch` step. Until one of them happens
+   `denglab/viroprofiler-host:v1.0.1` does not exist, the `host` job is the one red job on
+   every Docker run, and an amd64 run needs `--use_iphop false`. Once the fork is reachable,
+   a manual run of `docker.yml` on `deng-lab/viroprofiler` `main` with `push` ticked
+   publishes it.
 
    The viewer image is no longer a special case: `VPFKIT_REF` points at a commit on
-   `deng-lab/vpfkit`'s `main`, so the default `VPFKIT_REPO` builds it. The sixteen-sample
-   reference runs used an image built from the local working tree
-   (`denglab/viroprofiler-viewer:localtest`), which is a verification artefact, not something
-   anyone else can reproduce; rebuild it from the pinned SHA before publishing.
+   `deng-lab/vpfkit`'s `main`, the default `VPFKIT_REPO` builds it, and the reference object
+   was rebuilt inside exactly that image.
 2. **Run on amd64.** Two paths have no aarch64 execution route at all, so x86-64 is their only
    real test. Both have moved since this item was written, and what is left of each is
    specific:
@@ -528,11 +577,13 @@ Ordered by how much they change results.
      size limit rather than a defect (see below). Everything upstream of it is exercised on
      real data, including the depth table and its row-count assertion. What remains untested
      is VAMB's clustering and PHAMB's bin calls, and that needs a **different dataset**, not
-     another run of this one.
+     another run of this one. The decision is to use a public dataset with a few hundred
+     viral contigs at or above 5 kb; none has been chosen yet.
    - **`--use_iphop`** — forced off in the arm64 profile, so `RESULTS_TSE` has only ever seen
      the placeholder. `DB_IPHOP` and `read_iphop()` have each been exercised elsewhere; see
      [Limits of what has been verified](#limits-of-what-has-been-verified). The HPC cluster is
-     where this one gets finished.
+     where this one gets finished, once `denglab/viroprofiler-host:v1.0.1` exists (item 1);
+     the git tag `v1.0.1` waits for that run.
 
    **No machine on this network can host that run.** Both Sparks are aarch64, and so is the
    m21 workstation (Darwin arm64). The only x86-64 host reachable here is the NAS, `naspark` —
@@ -543,9 +594,10 @@ Ordered by how much they change results.
    So PHAMB is being taken to CI instead, in steps, because two questions have to be answered
    in order and the first is cheap:
 
-   1. **Do the images build on amd64?** **Answered: yes.** `docker.yml` builds
-      `viroprofiler-base` and `viroprofiler-binning` — the two the PHAMB path needs — on every
-      change under `docker/`, without pushing, and both pass. Since each Dockerfile ends in an
+   1. **Do the images build on amd64?** **Answered: yes.** `docker.yml` builds all sixteen on
+      every change under `docker/`; fifteen pass, and the sixteenth is item 1 above, not a
+      build defect. `viroprofiler-base` and `viroprofiler-binning` — the two the PHAMB path
+      needs — are among the fifteen. Since each Dockerfile ends in an
       `env -i` smoke test, that also settles more of the checklist than a build normally
       would: `vamb` is executable, `run_RF.py` resolves to the wrapper rather than the
       shadowed copy, the random forest deserialises under the installed scikit-learn, and
@@ -588,26 +640,16 @@ Ordered by how much they change results.
    A CI job is the right home for this even though it is not really a regression test: it is
    the only x86-64 machine available, it has 16 GB against the NAS's 7, and `--binning phamb`
    is already the one path CI alone exercises, in stub form.
-3. **Publish the images (see item 1) by restoring the build matrix.** `docker.yml` now builds
-   two images and pushes nothing. Restoring the push means recovering the removed job from
-   `git log -- .github/workflows/docker.yml`, giving its matrix a real list, and supplying the
-   `DOCKER_USER`/`DOCKER_PASSWORD` secrets. The list that was commented out is *stale*: ten
-   images named, sixteen present under `docker/` — `checkamg`, `genomad`, `qc`, `vclust`,
-   `viewer` and `vitap` are missing. Restoring it verbatim would publish a subset and look
-   like a full build.
-4. **Decide whether the `virsorter2` environment inside `viroprofiler-base` stays.** No
-   process reads it — everything that runs VirSorter2 carries the `viroprofiler_virsorter2`
-   label and gets its own image — and it is worth about 1 GB. It was left in place so that the
-   pixi migration changed packaging and nothing else.
-5. **Give the viewer something to say about iPHoP.** Host prediction is still the one
+3. **Give the viewer something to say about iPHoP.** Host prediction is still the one
    annotation family whose slot in `RESULTS_TSE` has never held a real file, because iPHoP has
    no aarch64 build. The reader is no longer the unknown part of that — `read_iphop()` has now
    parsed a real 13,379-row iPHoP table from p0075 — so what is left is an end-to-end run that
-   puts one through `create_tse.r` and into the viewer. The HPC cluster can do it; it was
-   under maintenance when this was written.
-6. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md): the VOGDB host and its
-   plain-HTTP URL (I-09), database setup steps that are not resumable (I-10), and the
-   vendored nf-core modules pinned to 2022 releases (I-19).
+   puts one through `create_tse.r` and into the viewer. The HPC cluster can do it, after
+   item 1.
+4. Remaining `Open` rows in [KNOWN_ISSUES.md](dev/KNOWN_ISSUES.md): database setup steps that
+   are not resumable (I-10), the vendored nf-core modules pinned to 2022 releases (I-19), a
+   symlinked database that is silently re-downloaded when not bind-mounted (I-53), and the
+   private iPHoP fork (I-59).
 
 On the vpfkit side, ordered the same way. **Item 1 is settled and kept here for its
 reasoning**, because it is the one change in this list that moves a result; items 2 onwards are
@@ -707,16 +749,15 @@ open.
    `coverm contig` six times, and two of those passes — `reads_per_base` and `rpkm` — feed no
    channel that anything consumes. Each pass re-reads every BAM. Keeping them as published
    side products is defensible; what is not is that nothing says which they are.
-3. **Publish the demo datasets properly.** `inst/extdata/` carries two synthetic objects so
-   the viewer has something to open with no files at all. They are generated by
-   `dev/make_test_data.R` and were not regenerated after the assay rename, so they still use
-   the legacy `tmm` spelling — which the viewer handles, and which makes them a useful test
-   of exactly that path.
-4. **Fix the Windows path assertions.** The matrix was narrowed to the three green cells, so
-   this no longer shows up as a red badge, but it is still a real defect: `export_vpftse()`
-   and `generate_report()` are asserted to return the path they were handed, and Windows
-   normalizes it. Someone running vpfkit on Windows hits the underlying behaviour, not just
-   the test. See [What is green over there](#what-is-green-over-there-and-what-is-not).
+3. ~~Publish the demo datasets properly.~~ **Done** (vpfkit `25f3a3b`): `inst/extdata/` is
+   regenerated by `dev/make_test_data.R` with the current assay names. The legacy `tmm`
+   spelling stays covered by the fixtures in `tests/`, which build it on the fly.
+4. ~~Fix the Windows path assertions.~~ **Fixed** (vpfkit `a11924f`). The defect was in
+   `vpf_prepare_outfile()`, which treated every path not starting with `/` as relative and
+   rewrote it under `normalizePath()`, so on Windows `export_vpftse()` and `generate_report()`
+   returned `C:/...` for a `C:\...` argument. A drive letter or a UNC prefix now counts as
+   absolute, and `windows-latest` is back in the CI matrix. See
+   [What is green over there](#what-is-green-over-there-and-what-is-not).
 
 ## Limits of what has been verified
 
@@ -744,10 +785,12 @@ open.
   would have kept it. Dereplication is therefore slightly incomplete for short contigs, in a
   bounded and now-quantified way, and lowering the prefilter threshold is the lever if it
   ever matters.
-- **Two of the sixteen images now build on amd64; the other fourteen have never been tried.**
-  `viroprofiler-base` and `viroprofiler-binning` are built by
-  [`docker.yml`](../.github/workflows/docker.yml) on every change under `docker/`, and both
-  pass. Everything else was built natively on aarch64 and only there.
+- **Fifteen of the sixteen images build on amd64 in CI; `viroprofiler-host` has never been
+  built there.** [`docker.yml`](../.github/workflows/docker.yml) builds all sixteen on every
+  change under `docker/`. The fifteen pass their `env -i` smoke tests on x86-64; `host` cannot
+  start, because the iPHoP fork it installs is private ([I-59](dev/KNOWN_ISSUES.md#i-59)).
+  Building is not running: apart from the PHAMB path, no amd64 image has executed a real
+  process yet. That is what the HPC iPHoP run is for.
 - **`--binning phamb` has not been executed on real data, but more of it is verified than that
   implies.** Because each Dockerfile ends in an `env -i` smoke test, the amd64 build of
   `viroprofiler-binning` establishes, on x86-64:

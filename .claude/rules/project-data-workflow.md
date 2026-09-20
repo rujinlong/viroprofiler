@@ -22,5 +22,5 @@
 - Pipeline info: `{outdir}/pipeline_info/`
 
 ## Branch Convention
-- `main` — stable releases only
-- `dev_ru` — active development, rebase onto main periodically
+- `main` — stable releases only; a push to it on `deng-lab/viroprofiler` publishes the images
+- `dev_ru` — active development; squash-merged into main, then main merged back into dev_ru
