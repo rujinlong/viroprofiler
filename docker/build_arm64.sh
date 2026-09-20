@@ -23,7 +23,7 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TAG="${TAG:-v0.3}"
+TAG="${TAG:-v1.0.1}"
 SIF_DIR="${SIF_DIR:-$HOME/singularity/viroprofiler}"
 
 # The viewer installs vpfkit from GitHub. The Dockerfile pins the commit; this only
