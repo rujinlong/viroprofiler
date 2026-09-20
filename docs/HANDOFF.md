@@ -352,6 +352,11 @@ that a writer returns the path it was handed, and `vpf_prepare_outfile()` rewrot
 starting with `/` — which on Windows is every path — under `normalizePath()`. It now recognizes
 a drive letter or a UNC prefix as absolute.
 
+The macOS cell was red on 2026-09-20 for a reason outside vpfkit: CRAN had no macOS binary
+yet for knitr 1.52, its URL returned a 404 page, and pak failed on "unknown archive type"
+while unpacking it. A rerun after CRAN catches up is the whole fix; the two Linux cells and
+Windows passed on the same commit.
+
 The reason for removing rather than tolerating a cell: **a permanently red cell is worse than an
 absent one**, because it trains everyone to ignore the badge. That is how three assertions
 matching the literal string `R version` — which R devel does not produce — survived, and how a
