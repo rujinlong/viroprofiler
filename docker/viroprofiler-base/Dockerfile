@@ -4,7 +4,7 @@
 # Built from a committed lockfile: `pixi install --locked` refuses to build if
 # pixi.lock does not match pixi.toml. See docs/dev/PACKAGING.md.
 #
-# Three prefixes on one PATH, in the order below. That order is load-bearing:
+# Two prefixes on one PATH, in the order below. That order is load-bearing:
 # GENEPRED, MICOMPLETEDB and VOGDB call `prodigal-gv` and `hmmsearch` by bare
 # name and get CheckV's copies, because the base environment declares neither.
 # pixi.toml says more about why they are left there.
@@ -18,18 +18,18 @@ WORKDIR /app
 COPY ./docker/viroprofiler-base/pixi.toml ./docker/viroprofiler-base/pixi.lock /app/
 
 RUN --mount=type=cache,target=/root/.cache/rattler \
-    pixi install --locked -e base -e checkv -e virsorter2
+    pixi install --locked -e base -e checkv
 
 # Nextflow does not activate an environment: it writes a `.command.sh` and runs
 # it, so every tool must resolve from PATH alone.
-ENV PATH=/app/.pixi/envs/base/bin:/app/.pixi/envs/checkv/bin:/app/.pixi/envs/virsorter2/bin:$PATH
+ENV PATH=/app/.pixi/envs/base/bin:/app/.pixi/envs/checkv/bin:$PATH
 
 # Smoke test in a stripped environment, because that is how `.command.sh` runs.
 # prodigal-gv and hmmsearch are asserted to come from the checkv prefix: if a
 # future edit adds them to the base environment they would silently take over
 # CheckV's own internal calls as well.
 RUN env -i HOME=/tmp LANG=C.UTF-8 \
-        PATH=/app/.pixi/envs/base/bin:/app/.pixi/envs/checkv/bin:/app/.pixi/envs/virsorter2/bin:/usr/bin:/bin \
+        PATH=/app/.pixi/envs/base/bin:/app/.pixi/envs/checkv/bin:/usr/bin:/bin \
     bash -c 'checkv -h > /dev/null && seqkit version && samtools --version | head -1 && \
              blastn -version | head -1 && mmseqs version && csvtk version && \
              coverm --version && pigz --version && bbversion.sh > /dev/null && \

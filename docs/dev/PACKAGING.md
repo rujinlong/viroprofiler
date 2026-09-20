@@ -170,15 +170,15 @@ does not abolish it, it just makes the environments behind it declarable and loc
 
 ### Multiple environments per image
 
-Three images build more than one environment: `viroprofiler-base` (base + checkv + virsorter2),
+Three images build more than one environment: `viroprofiler-base` (base + checkv),
 `viroprofiler-geneannot` (base/DRAM + emapper + abricate), `viroprofiler-replicyc` (replidec +
 bacphlip). The mapping onto pixi is direct: one `pixi.toml` per image, one `[feature.X]` per
 current `env_X.yml`, one entry in `[environments]` per prefix.
 
 The one thing to get right is solve groups. These environments exist precisely because their
-dependencies conflict — checkv wants numpy 1.23.1, virsorter2 wants Python 3.10.0 exactly. Each
-environment must therefore be given its **own** `solve-group`, or pixi will try to co-solve them
-and reproduce the conflict the split was created to avoid.
+dependencies conflict — checkv wants numpy 1.23.1, which the rest of the base tools do not
+accept. Each environment must therefore be given its **own** `solve-group`, or pixi will try
+to co-solve them and reproduce the conflict the split was created to avoid.
 
 ### Two platforms
 
@@ -362,10 +362,11 @@ lock is what made the problem visible:
 - **`viroprofiler-base`.** `prodigal-gv` and `hmmsearch` are declared nowhere: GENEPRED,
   MICOMPLETEDB and VOGDB call them by bare name and get CheckV's copies. The manifest records
   that, and the smoke test asserts which prefix they resolve from, because adding them to the
-  base feature would silently take over CheckV's own internal calls too. The `virsorter2`
-  environment in this image has no consumer — every process that runs VirSorter2 carries the
-  `viroprofiler_virsorter2` label — and is kept only so that this migration changed packaging
-  and nothing else. Removing it is a separate decision worth about 1 GB.
+  base feature would silently take over CheckV's own internal calls too. The image no longer
+  carries a `virsorter2` environment: it had no consumer — every process that runs VirSorter2
+  carries the `viroprofiler_virsorter2` label — and was kept through the pixi migration only
+  so that the migration changed packaging and nothing else. Dropping it took about 1 GB off
+  the image.
 - **`viroprofiler-geneannot`.** The `--no-deps` question is answered by keeping `--no-deps`:
   pixi.lock already provides a dependency set that solves on both platforms, and letting pip
   resolve DRAM's requirements would pull PyPI copies over conda ones.
