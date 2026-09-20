@@ -30,4 +30,15 @@ process ABRICATE {
         abricate: \$(echo \$(abricate -v) | sed 's/^abricate  //' ))
     END_VERSIONS
     """
+
+    stub:
+    """
+    printf '#FILE\tSEQUENCE\tSTART\tEND\tSTRAND\tGENE\tCOVERAGE\tCOVERAGE_MAP\tGAPS\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n' > ARG_argannot.tsv
+    printf 'SEQUENCE\tSTART\tEND\tSTRAND\tGENE\tCOVERAGE\tCOVERAGE_MAP\tGAPS\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n' > anno_abricate.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        abricate: 1.0.1
+    END_VERSIONS
+    """
 }

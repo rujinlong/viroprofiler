@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#
+# Build the ViroProfiler container images natively on an aarch64 host and convert them to
+# SIF files for Apptainer.
+#
+# The images published on Docker Hub are amd64-only, so on arm64 they have to be rebuilt
+# from the Dockerfiles in this directory. One image is deliberately absent -- see
+# docs/dev/ARM64.md for why iPHoP cannot be built for this architecture -- and one tool is
+# absent from an image that does build: `viroprofiler-binning` omits VAMB on arm64, which is
+# what makes `--binning phamb` amd64-only.
+#
+# Every image except `host` installs from a committed pixi.lock, so a rebuild reproduces the
+# package set that was tested rather than re-solving. If a build fails with "lock file not
+# up-to-date with the workspace", run `pixi lock` in that image's directory, re-test the
+# image, and commit the result -- do not treat the refreshed lock as a formality.
+#
+# Usage:
+#   bash docker/build_arm64.sh                 # build everything, write SIFs to the default dir
+#   SIF_DIR=/path bash docker/build_arm64.sh   # choose where the SIFs go
+#   bash docker/build_arm64.sh base qc         # build only the named images
+#   VPFKIT_REPO=rujinlong/vpfkit bash docker/build_arm64.sh viewer   # vpfkit from a fork
+#
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TAG="${TAG:-v1.0.1}"
+SIF_DIR="${SIF_DIR:-$HOME/singularity/viroprofiler}"
+
+# The viewer installs vpfkit from GitHub. The Dockerfile pins the commit; this only
+# chooses which repository it is fetched from, for the case where the pinned commit has
+# been pushed to a fork but not yet to deng-lab.
+VPFKIT_REPO="${VPFKIT_REPO:-}"
+BUILD_ARGS=()
+[[ -n "$VPFKIT_REPO" ]] && BUILD_ARGS+=(--build-arg "VPFKIT_REPO=${VPFKIT_REPO}")
+
+ALL_IMAGES=(base qc abundance replicyc vibrant bracken virsorter2 vcontact3 vclust vitap genomad checkamg geneannot binning viewer)
+IMAGES=("${@:-}")
+[[ -z "${IMAGES[*]}" ]] && IMAGES=("${ALL_IMAGES[@]}")
+
+mkdir -p "$SIF_DIR"
+cd "$REPO_ROOT"
+export DOCKER_BUILDKIT=1
+
+status=0
+for img in "${IMAGES[@]}"; do
+    dockerfile="docker/viroprofiler-${img}/Dockerfile"
+    if [[ ! -f "$dockerfile" ]]; then
+        echo "SKIP  ${img}: no ${dockerfile}"
+        continue
+    fi
+
+    echo "BUILD ${img}"
+    if ! docker build "${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}" \
+             -f "$dockerfile" -t "denglab/viroprofiler-${img}:${TAG}" . ; then
+        echo "FAIL  ${img}: docker build"
+        status=1
+        continue
+    fi
+
+    echo "SIF   ${img}"
+    if ! apptainer build --force "${SIF_DIR}/viroprofiler-${img}.sif" \
+            "docker-daemon:denglab/viroprofiler-${img}:${TAG}"; then
+        echo "FAIL  ${img}: apptainer build"
+        status=1
+        continue
+    fi
+
+    echo "OK    ${img} -> ${SIF_DIR}/viroprofiler-${img}.sif"
+done
+
+exit $status

@@ -13,13 +13,15 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "default": "test",
+                    "default": "all",
                     "enum": [
                         "setup",
-                        "test",
+                        "fastqc",
+                        "fastp",
+                        "contiglib",
                         "all"
                     ],
-                    "description": "Pipeline running mode"
+                    "description": "Last pipeline stage to run. `setup` builds the databases and processes no reads; the others are cumulative, so `contiglib` runs everything `fastp` runs and then assembles, cleans and dereplicates. `fastqc` and `fastp` are incompatible with `--reads_type clean`, which skips both."
                 },
                 "input": {
                     "type": "string",
@@ -34,8 +36,14 @@
                 "db": {
                     "type": "string",
                     "description": "Directory of ViroProfiler database",
-                    "default": "~/.nextflow/assets/deng-lab/viroprofiler/db",
+                    "default": "$HOME/viroprofiler",
                     "fa_icon": "fas fa-database"
+                },
+                "container_binds": {
+                    "type": "string",
+                    "description": "Extra host paths to bind into every container, comma-separated.",
+                    "help_text": "Needed when entries under --db are symlinks that point outside it, for example a shared read-only database tree.",
+                    "fa_icon": "fas fa-link"
                 },
                 "outdir": {
                     "type": "string",
@@ -54,6 +62,14 @@
                     "type": "string",
                     "description": "MultiQC report title. Printed as page header, used for filename if not otherwise specified.",
                     "fa_icon": "fas fa-file-signature"
+                },
+                "sample_metadata": {
+                    "type": "string",
+                    "format": "file-path",
+                    "mimetype": "text/csv",
+                    "description": "Per-sample metadata joined into the TSE colData.",
+                    "help_text": "CSV, TSV or XLSX with one column of sample names matching the samplesheet. Required for any group-wise analysis downstream, because the samplesheet itself is restricted to three columns.",
+                    "fa_icon": "fas fa-table"
                 }
             },
             "required": [
@@ -97,7 +113,7 @@
                 "assemblies": {
                     "type": "string",
                     "description": "Use contigs or scaffolds from assembler output",
-                    "default": "contigs",
+                    "default": "scaffolds",
                     "enum": [
                         "contigs",
                         "scaffolds"
@@ -110,7 +126,7 @@
                 },
                 "contig_cluster_min_similarity": {
                     "type": "number",
-                    "description": "Minimum similarity of contigs in a contig cluster",
+                    "description": "Minimum percent identity, over the aligned region only, between two contigs in the same cluster (Vclust `ani`)",
                     "default": 95,
                     "minimum": 70,
                     "maximum": 100,
@@ -118,7 +134,7 @@
                 },
                 "contig_cluster_min_coverage": {
                     "type": "number",
-                    "description": "Minimum coverage of the shorter contig in a contig cluster",
+                    "description": "Minimum percent of the shorter contig that must be aligned for the two contigs to share a cluster; the longer contig is unconstrained, so a contained contig is absorbed (Vclust `qcov`)",
                     "default": 85,
                     "minimum": 30,
                     "maximum": 100,
@@ -175,7 +191,8 @@
                         "false",
                         "phamb",
                         "vrhyme"
-                    ]
+                    ],
+                    "default": "false"
                 },
                 "binning_minlen_contig": {
                     "type": "integer",
@@ -186,6 +203,11 @@
                     "type": "integer",
                     "description": "Minimum bin length",
                     "default": 5000
+                },
+                "vogdb_version": {
+                    "type": "integer",
+                    "description": "VOG release used to build the HMM library PHAMB's random forest reads. Pinned rather than 'latest' so that two installations built at different times get the same database.",
+                    "default": 236
                 }
             }
         },
@@ -195,15 +217,38 @@
             "description": "Parameters for viral detection softwares",
             "default": "",
             "properties": {
-                "dvf_qvalue": {
-                    "type": "number",
-                    "description": "DeepVirFinder q-value",
-                    "default": 0.1
+                "genomad_preset": {
+                    "type": "string",
+                    "description": "geNomad post-classification filtering preset",
+                    "default": "default",
+                    "enum": [
+                        "default",
+                        "conservative",
+                        "relaxed"
+                    ]
+                },
+                "genomad_splits": {
+                    "type": "integer",
+                    "description": "Split geNomad's MMseqs2 marker search into this many chunks to cap memory use. 0 leaves it unsplit.",
+                    "default": 0
                 },
                 "virsorter2_groups": {
                     "type": "string",
                     "description": "Category of viruses, can be one or multiple of \"dsDNAphage,NCLDV,RNA,ssDNA,lavidaviridae\"",
                     "default": "dsDNAphage"
+                }
+            }
+        },
+        "auxiliary_gene_parameters": {
+            "title": "Auxiliary gene parameters",
+            "type": "object",
+            "description": "Parameters for auxiliary gene (AMG/AReG/APG) calling",
+            "default": "",
+            "properties": {
+                "checkamg_min_weight": {
+                    "type": "number",
+                    "description": "Minimum CheckAMG AMG weight for an auxiliary gene to be reported; higher is more conservative",
+                    "default": 0.6
                 }
             }
         },
@@ -241,29 +286,20 @@
             "description": "Parameters of softwares used in taxonomy assignment module",
             "default": "",
             "properties": {
-                "taxa_db_source": {
-                    "type": "string",
-                    "description": "Which taxonomy db should be used",
-                    "default": "NCBI",
-                    "enum": [
-                        "NCBI",
-                        "ICTV"
-                    ]
-                },
-                "contig_minlen_vcontact2": {
+                "contig_minlen_vcontact3": {
                     "type": "integer",
-                    "description": "Minimum contig length for vConTACT2 input",
+                    "description": "Minimum contig length for vConTACT3 input",
                     "default": 10000
                 },
-                "pc_inflation": {
-                    "type": "number",
-                    "description": "Inflation of protein clusters in vConTACT2",
-                    "default": 1.5
+                "vcontact3_db_version": {
+                    "type": "integer",
+                    "description": "vConTACT3 reference database version. Each vConTACT3 release accepts only one version; 3.2.4 requires 232 and rejects 223, 228 and 230.",
+                    "default": 232
                 },
-                "vc_inflation": {
-                    "type": "number",
-                    "description": "Inflation of viral clusters in vConTACT2",
-                    "default": 1.5
+                "use_vitap": {
+                    "type": "boolean",
+                    "description": "Use VITAP for taxonomy assignment. VITAP is the highest-priority source in the merged taxonomy: it is the only caller here that reaches species rank. Needs the 1.3 GB database DB_VITAP installs.",
+                    "default": true
                 }
             }
         },
@@ -295,7 +331,7 @@
                 "use_iphop": {
                     "type": "boolean",
                     "description": "Use iPhOP for phage host prediction",
-                    "default": false
+                    "default": true
                 },
                 "use_decontam": {
                     "type": "boolean",
@@ -315,14 +351,19 @@
                 "use_dram": {
                     "type": "boolean",
                     "description": "Use DRAM for metabolic reconstruction",
-                    "default": false
+                    "default": true
+                },
+                "use_checkamg": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run CheckAMG to curate auxiliary genes (AMG/AReG/APG)"
+                },
+                "use_vibrant": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Run VIBRANT. It contributes a third opinion to the candidate-virus union and a genome quality call to the TSE; geNomad does detection and CheckAMG does auxiliary genes."
                 },
                 "input_contigs": {
-                    "type": "string",
-                    "description": "Input contigs file",
-                    "default": null
-                },
-                "decontam": {
                     "type": "string",
                     "description": "Input contigs file",
                     "default": null
@@ -335,35 +376,6 @@
                         "raw",
                         "clean"
                     ]
-                }
-            }
-        },
-        "reference_genome_options": {
-            "title": "Reference genome options",
-            "type": "object",
-            "fa_icon": "fas fa-dna",
-            "description": "Reference genome related files and options required for the workflow.",
-            "properties": {
-                "genome": {
-                    "type": "string",
-                    "description": "Name of iGenomes reference.",
-                    "fa_icon": "fas fa-book",
-                    "help_text": "If using a reference genome configured in the pipeline using iGenomes, use this parameter to give the ID for the reference. This is then used to build the full paths for all required reference genome files e.g. `--genome GRCh38`. \n\nSee the [nf-core website docs](https://nf-co.re/usage/reference_genomes) for more details."
-                },
-                "igenomes_base": {
-                    "type": "string",
-                    "format": "directory-path",
-                    "description": "Directory / URL base for iGenomes references.",
-                    "default": "s3://ngi-igenomes/igenomes",
-                    "fa_icon": "fas fa-cloud-download-alt",
-                    "hidden": true
-                },
-                "igenomes_ignore": {
-                    "type": "boolean",
-                    "description": "Do not load the iGenomes reference config.",
-                    "fa_icon": "fas fa-ban",
-                    "hidden": true,
-                    "help_text": "Do not load `igenomes.config` when running the pipeline. You may choose this option if you observe clashes between custom parameters and those supplied in `igenomes.config`."
                 }
             }
         },
@@ -425,7 +437,7 @@
                 "max_cpus": {
                     "type": "integer",
                     "description": "Maximum number of CPUs that can be requested for any single job.",
-                    "default": 60,
+                    "default": 16,
                     "fa_icon": "fas fa-microchip",
                     "hidden": true,
                     "help_text": "Use to set an upper-limit for the CPU requirement for each process. Should be an integer e.g. `--max_cpus 1`"
@@ -433,7 +445,7 @@
                 "max_memory": {
                     "type": "string",
                     "description": "Maximum amount of memory that can be requested for any single job.",
-                    "default": "400.GB",
+                    "default": "128.GB",
                     "fa_icon": "fas fa-memory",
                     "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$",
                     "hidden": true,
@@ -442,7 +454,7 @@
                 "max_time": {
                     "type": "string",
                     "description": "Maximum amount of time that can be requested for any single job.",
-                    "default": "100.h",
+                    "default": "120.h",
                     "fa_icon": "far fa-clock",
                     "pattern": "^(\\d+\\.?\\s*(s|m|h|day)\\s*)+$",
                     "hidden": true,
@@ -513,13 +525,6 @@
                     "fa_icon": "fas fa-cog",
                     "hidden": true
                 },
-                "tracedir": {
-                    "type": "string",
-                    "description": "Directory to keep pipeline Nextflow logs and reports.",
-                    "default": "${params.outdir}/pipeline_info",
-                    "fa_icon": "fas fa-cogs",
-                    "hidden": true
-                },
                 "validate_params": {
                     "type": "boolean",
                     "description": "Boolean whether to validate parameters against the schema at runtime",
@@ -563,13 +568,13 @@
             "$ref": "#/definitions/viral_detection_parameters"
         },
         {
+            "$ref": "#/definitions/auxiliary_gene_parameters"
+        },
+        {
             "$ref": "#/definitions/taxonomy_assignment_parameters"
         },
         {
             "$ref": "#/definitions/others"
-        },
-        {
-            "$ref": "#/definitions/reference_genome_options"
         },
         {
             "$ref": "#/definitions/institutional_config_options"

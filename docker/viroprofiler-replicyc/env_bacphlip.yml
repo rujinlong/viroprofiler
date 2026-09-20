@@ -1,6 +1,0 @@
-name: viroprofiler-bacphlip
-channels:
-    - conda-forge
-    - bioconda
-dependencies:
-    - bacphlip

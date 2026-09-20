@@ -1,14 +1,31 @@
 site_name: ViroProfiler Documentation
 repo_url: https://github.com/deng-lab/viroprofiler
 repo_name: deng-lab/viroprofiler
+
+# Build with `mkdocs build --strict`, which turns a broken cross-reference into a failure
+# rather than a warning nobody reads.
+#
+# HANDOFF.md is for whoever works on the pipeline next: it is full of paths on one
+# particular machine and links out to source files, neither of which belongs on the site.
+# README.md is the index for reading docs/ on GitHub and would collide with index.md.
+exclude_docs: |
+  HANDOFF.md
+  README.md
 # extra_css:
 #   - stylesheets/extra.css
 nav:
     - Home: index.md
+    - Installation: installation.md
+    - Quick start: quickstart.md
     - Tutorial: tutorial.md
+    - Usage: usage.md
     - Outputs: output.md
-    - Config template: config.md
     - Selecting NF profiles: profiles.md
+    - Config template: config.md
+    - Development:
+        - Known issues: dev/KNOWN_ISSUES.md
+        - Building for arm64: dev/ARM64.md
+        - Packaging the images: dev/PACKAGING.md
 theme:
   name: material
   palette:
@@ -19,9 +36,11 @@ theme:
 plugins:
   - git-revision-date
 markdown_extensions:
+  # `materialx.emoji` was removed in mkdocs-material 9.4; these are the paths that
+  # replaced it, and the site does not build with the old ones on any current release.
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - tables
   - pymdownx.highlight:
       anchor_linenums: true

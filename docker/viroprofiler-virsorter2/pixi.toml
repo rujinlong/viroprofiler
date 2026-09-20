@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler VirSorter2 image (process labels: viroprofiler_virsorter2)
+#
+# VirSorter2 is not a detector in this pipeline: it runs on the already-selected
+# candidates to produce viral-affi-contigs-for-dramv.tab, without which
+# `DRAM-v.py distill` raises KeyError on the missing auxiliary_score column.
+#
+# The bioconda package carries the snakemake constraint VirSorter2 2.2.4 needs
+# in its own dependency metadata -- snakemake 8 removed the top-level
+# `load_configfile` that `virsorter setup` imports -- so a fresh solve cannot
+# legally pick snakemake 8. The lock makes that concrete by recording the exact
+# artifacts, which is the defence against those builds leaving current repodata.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-virsorter2"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "*"
+virsorter = "2.2.4.*"
+# The VIRSORTER2 process post-processes VirSorter2's output with these.
+seqkit = "*"
+csvtk = "*"
+wget = "*"

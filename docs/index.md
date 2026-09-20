@@ -1,4 +1,4 @@
-# Welcome to <u>ViroProfiler</u> pipeline documentation
+# Welcome to ViroProfiler pipeline documentation
 
 ## About
 
@@ -11,13 +11,22 @@ The pipeline's main steps are:
 | Pipeline modules | Used software or databases |
 | :------------- | :------------------------- |
 | Genome assembly | [metaSPAdes](https://github.com/ablab/spades) |
-| Binning | [vRhyme](https://github.com/AnantharamanLab/vRhyme) or [phamb](https://github.com/RasmussenLab/phamb) |
-| Viral contig identification | [VirSorter2](https://github.com/jiarong/VirSorter2), [DeepVirFinder](https://github.com/jessieren/DeepVirFinder), [VIBRANT](https://github.com/AnantharamanLab/VIBRANT) and [CheckV](https://bitbucket.org/berkeleylab/checkv/src/master/) |
+| Contig library dereplication | [Vclust](https://github.com/refresh-bio/vclust), at the MIUViG species thresholds |
+| Abundance estimation | [CoverM](https://github.com/wwood/CoverM) |
+| Binning | [vRhyme](https://github.com/AnantharamanLab/vRhyme) |
+| Viral contig identification | [geNomad](https://github.com/apcamargo/genomad), [CheckV](https://bitbucket.org/berkeleylab/checkv/src/master/) and [VIBRANT](https://github.com/AnantharamanLab/VIBRANT); [VirSorter2](https://github.com/jiarong/VirSorter2) then prepares the affi-contigs table DRAM-v needs |
+| Auxiliary gene (AMG/AReG/APG) calling | [CheckAMG](https://github.com/AnantharamanLab/CheckAMG) |
 | Gene function annotation | [DRAM-v](https://github.com/WrightonLabCSU/DRAM), [EggNOG](http://eggnog5.embl.de/) and [abricate](https://github.com/tseemann/abricate) |
 | Viral replication cycle prediction |  [BACPHLIP](https://github.com/adamhockenberry/bacphlip) or [Replidec](https://github.com/deng-lab/Replidec) |
-| Viral taxonomy annotation | [vConTACT2](https://bitbucket.org/MAVERICLab/vcontact2) and [MMseqs2 taxonomy](https://github.com/soedinglab/MMseqs2) |
-| Viral-host prediction | [iPhoP](https://bitbucket.org/srouxjgi/iphop) |
-| Results visualization | [MulqiQC](https://multiqc.info/), [R Markdown](https://rmarkdown.rstudio.com/) and [Shiny](https://shiny.rstudio.com/) |
+| Viral taxonomy annotation | [VITAP](https://github.com/DrKaiyangZheng/VITAP) and [vConTACT3](https://bitbucket.org/MAVERICLab/vcontact3) |
+| Viral-host prediction | [iPHoP](https://bitbucket.org/srouxjgi/iphop) |
+| Results object and visualization | [vpfkit](https://github.com/deng-lab/vpfkit) assembles a [TreeSummarizedExperiment](https://bioconductor.org/packages/TreeSummarizedExperiment/) and provides the Shiny viewer and the Quarto report; [MultiQC](https://multiqc.info/) summarises the run |
+
+The pipeline's headline output is that TreeSummarizedExperiment: one object carrying the
+abundance assays, every per-contig annotation and the sample metadata, ready for analysis in
+R. Pass `--sample_metadata` or its `colData` will hold nothing but the sample names.
+
+Requires **Nextflow 26.04 or newer** — see [Installation](installation.md).
 
 !!! note "Tutorial"
 

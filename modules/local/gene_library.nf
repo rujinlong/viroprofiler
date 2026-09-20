@@ -13,6 +13,7 @@ process GENEPRED {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     prodigal-gv -i $contigs -o all.gff -a all.faa -d all.fna -p meta -f gff -g 11
     pretty_gff.py -i all.gff -o genes_${prefix}.gff
@@ -20,6 +21,13 @@ process GENEPRED {
     mv all.faa all.fna prodigal
     sed 's/*//' prodigal/all.faa |  grep -v '^\$' > genes_${prefix}.faa
     sed 's/*//' prodigal/all.fna |  grep -v '^\$' > genes_${prefix}.fna
+    """
+
+    stub:
+    """
+    printf '>stub_gene_1\nACGTACGT\n' > genes_${prefix}.fna
+    printf '>stub_gene_1\nMKVL\n' > genes_${prefix}.faa
+    printf '##gff-version 3\n' > genes_${prefix}.gff
     """
 }
 
@@ -39,8 +47,15 @@ process NRSEQS {
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     mmseqs easy-cluster $seqs $prefix tmp --min-seq-id $min_similarity -c $min_coverage --threads $task.cpus
+    """
+
+    stub:
+    """
+    printf '>stub_seq\nACGT\n' > ${prefix}_rep_seq.fasta
+    printf 'representative\tmember\n' > ${prefix}_cluster.tsv
     """
 
 }

@@ -14,12 +14,13 @@ output
 ├── bacphlip
 ├── checkv
 ├── contiglib
+├── checkamg
 ├── dramv
-├── dvf
 ├── emapper
 ├── fastp
 ├── fastqc
 ├── genepred4ctg
+├── genomad
 ├── mapping2contigs
 ├── multiqc
 ├── nrgene
@@ -33,24 +34,22 @@ output
 └── virsorter2
 ```
 
-<!-- TODO nf-core: Add a brief overview of what the output is and how it is generated -->
-
 ## Pipeline overview
 
 The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes data using the following steps:
 
-1. Reads QC ([`FastQC`](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/))
-2. Dereplication
+1. Reads QC ([`FastQC`](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/), [`fastp`](https://github.com/OpenGene/fastp))
+2. Assembly ([`metaSPAdes`](https://github.com/ablab/spades))
 3. Contig quality evaluation and provirus detection ([`CheckV`](https://bitbucket.org/berkeleylab/checkv))
-4. Contig clustering based on ANI
-5. Binning (optional, using Phamb or vrhyme)
-6. Abundance estimation
-7. Viral sequence identification (VirSorter2, VIBRANT, DeepVirfinder)
-8. Functional annotation
-9. Taxonomy assignment
-10. Viral-host prediction
-11. Viral replication cycle prediction
-12. Merged output
+4. Dereplication of the whole contig library at species level ([`Vclust`](https://github.com/refresh-bio/vclust))
+5. Binning (optional, using vRhyme or PHAMB)
+6. Abundance estimation ([`CoverM`](https://github.com/wwood/CoverM))
+7. Viral sequence identification (geNomad, CheckV quality and optionally VIBRANT; VirSorter2 runs afterwards to prepare the table DRAM-v needs)
+8. Auxiliary gene calling ([`CheckAMG`](https://github.com/AnantharamanLab/CheckAMG)) and functional annotation ([`DRAM-v`](https://github.com/WrightonLabCSU/DRAM))
+9. Taxonomy assignment ([`VITAP`](https://github.com/DrKaiyangZheng/VITAP), [`vConTACT3`](https://bitbucket.org/MAVERICLab/vcontact3))
+10. Viral-host prediction ([`iPHoP`](https://bitbucket.org/srouxjgi/iphop))
+11. Viral replication cycle prediction (BACPHLIP or Replidec)
+12. A TreeSummarizedExperiment gathering all of the above, built by [`vpfkit`](https://github.com/deng-lab/vpfkit)
 13. Aggregate report describing results and QC from the whole pipeline ([`MultiQC`](http://multiqc.info/))
 14. [Pipeline information](#pipeline-information) - Report metrics generated during the workflow execution
 
@@ -67,17 +66,19 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 
 [FastQC](http://www.bioinformatics.babraham.ac.uk/projects/fastqc/) gives general quality metrics about your sequenced reads. It provides information about the quality score distribution across your reads, per base sequence content (%A/T/G/C), adapter contamination and overrepresented sequences. For further reading and documentation see the [FastQC help pages](http://www.bioinformatics.babraham.ac.uk/projects/fastqc/Help/).
 
-![MultiQC - FastQC sequence counts plot](images/mqc_fastqc_counts.png)
-
-![MultiQC - FastQC mean quality scores plot](images/mqc_fastqc_quality.png)
-
-![MultiQC - FastQC adapter content plot](images/mqc_fastqc_adapter.png)
-
-> **NB:** The FastQC plots displayed in the MultiQC report shows _untrimmed_ reads. They may contain adapter sequence and potentially regions with low quality.
+> **Note:** The FastQC plots displayed in the MultiQC report show _untrimmed_ reads. They may contain adapter sequence and potentially regions with low quality.
 
 ### Dereplication of contigs
 
-Contigs from all samples were merged into a single file, and 100% identical contigs were removed and only the longest one was kept. This step is to remove redundant contigs and reduce the computational cost of downstream analysis. The remaining contigs formed the contig library (contigs_cclib.fasta.gz). In addition, another contig library was created by removing short contigs. The shortest contig length threshold can be set by users in the `params.yml` file. The remaining contigs formed the long contig library (contigs_cclib_long.fasta.gz).
+Contigs from all samples are merged into one library, `contigs_cclib.fasta.gz`, and a second
+library `contigs_cclib_long.fasta.gz` drops everything below `--contig_minlen`.
+
+Dereplication happens after that, in `CONTIGLIB_CLUSTER`: Vclust removes exact duplicates
+and their reverse complements, then clusters what remains at the MIUViG species thresholds
+(`--contig_cluster_min_similarity`, `--contig_cluster_min_coverage`) and keeps one
+representative per cluster as `contigs_nrclib.fasta`. That file, not either `cclib`, is the
+reference reads are mapped to, which is why viral identification runs after this step rather
+than before it.
 
 ### Contig quality evaluation and provirus detection
 
@@ -85,39 +86,62 @@ The first step of the long contig library analysis is to evaluate the quality of
 
 ### Contig clustering based on ANI
 
-The long contig library were then dereplicated using MGV clustering script (https://github.com/snayfach/MGV/tree/master/ani_cluster). After clustering, each cluster is roughly a viral species. The representative contig of each cluster is merged into a non-redundant contig library (nrclib), and used for downstream annotation and analysis. This step is to reduce the computational cost of downstream analysis.
+The long contig library is then dereplicated with [Vclust](https://github.com/refresh-bio/vclust): exact duplicates are collapsed first, a Kmer-db prefilter narrows the candidate pairs, LZ-ANI aligns the survivors, and the pairs are clustered greedily. Two contigs join the same cluster when they align at `--contig_cluster_min_similarity` percent identity or better **over the aligned region**, covering at least `--contig_cluster_min_coverage` percent **of the shorter contig**. Nothing is required of the longer contig, so a short contig contained in a longer one is absorbed by it. At the defaults (95 % and 85 %) this is the MIUViG species criterion, and each cluster is roughly a viral species.
 
-### Binning (optional, using Phamb or vrhyme)
+The representative contig of each cluster — the longest member — is merged into a non-redundant contig library (nrclib), and used for downstream annotation and analysis. This step is to reduce the computational cost of downstream analysis. `contigs_ANIclst.tsv` maps every contig in the library to the representative of its cluster.
 
-The representative contigs of each cluster were can be binned into different bins using Phamb or vrhyme.
+### Binning (optional, using PHAMB or vRhyme)
+
+The representative contigs of each cluster can be binned into viral MAGs using [phamb](https://github.com/RasmussenLab/phamb) or [vRhyme](https://github.com/AnantharamanLab/vRhyme).
 
 ### Abundance estimation
 
-Abundance of contigs or bins were estimated using the clean reads mapped to the contigs or bins. There are multiple abundance metrics available, including raw counts, TPM, and RPKM. In addition, the mapped BAM files can be imported into other tools such as MetaPop (https://github.com/metaGmetapop/metapop) for macro- and micro-diversity analyses of viruses and visualization of metagenomic-derived populations.
+Abundance of contigs or bins is estimated using clean reads mapped to the contigs or bins. Multiple abundance metrics are available, including raw counts, TPM, and RPKM. The mapped BAM files can also be imported into other tools such as [MetaPop](https://github.com/metaGmetapop/metapop) for macro- and micro-diversity analyses of viruses and visualization of metagenomic-derived populations.
 
 ### Viral sequence identification
 
-Viral sequences were identified using multiple tools in ViroProfiler. Results of each tools were saved to separate files, and be merged into a final annotation file in the end.
+Viral sequences are identified by geNomad, by CheckV's quality calls, and -- unless
+`--use_vibrant false` -- by VIBRANT. Results from each tool are saved to separate files, and
+their union is the candidate-virus set carried forward (`vircontigs/`). VirSorter2 runs on
+that set rather than contributing to it: it produces the affi-contigs table DRAM-v requires
+plus a per-contig score column. Any detector hit that names a sequence absent from the
+contig library is recorded in `vircontigs/putative_vcontigs_unmatched.list` instead of being
+dropped silently.
 
 ### Functional annotation
 
-This step is to annotate protein sequences of viruses using multiple tools and databases. Results of each tools were saved to separate files, and be merged into a final annotation file in the end.
+Protein sequences of viruses are annotated using multiple tools and databases (DRAM-v, eggNOG-mapper, abricate). Results from each tool are saved to separate files and merged into a final annotation file.
 
 ### Taxonomy assignment
 
-This step is to assign taxonomy to the contigs or bins using MMseqs2 taxonomy module. Contigs were also clustered into a roughly genus level using vConTACT2. vConTACT2 can also be used to assign taxonomy to viral contigs or bins. However, we found at most time vConTACT2 can only assign taxonomy to a few contigs or bins. Therefore, we use MMseqs2 taxonomy module with a customized viral database to assign taxonomy to all contigs or bins. The customized viral database was built using the viral sequences from NCBI RefSeq database, which is the same database used by vConTACT2. In addition, we also support the new ICTV viral taxonomy nomonclature by creating a separate database using the viral sequences and taxonomy annotations from ICTV database. The results were saved to the `taxonomy` folder.
+Taxonomy is assigned by two independent callers and then merged. VITAP scores each contig
+against ICTV reference genomes on a multipartite graph and is the only caller here that
+reaches species; vConTACT3 clusters the contigs with a reference set by gene sharing and
+predicts a lineage from realm down to genus for each cluster. `merge_taxonomy.py` resolves
+the two rank by rank, taking the highest-priority caller that made a call at that rank --
+VITAP first, vConTACT3 second -- and skipping a caller at the ranks below any disagreement
+with the lineage already resolved above it, so a merged lineage cannot contradict itself.
+
+The merged table is `taxonomy/taxonomy.tsv`: one row per contig, one column per rank
+(`Realm` ... `Species`), and beside each rank a `<Rank>_source` column naming the caller
+the value came from. Ranks vConTACT3 labelled as de novo clusters keep its
+`novel_<rank>_<n>_of_<parent>` labels, which are stable per cluster and cannot be
+confused with ICTV names. `taxonomy/taxonomy_tse.tsv` carries the same lineages in the layout `RESULTS_TSE` reads.
+ViroProfiler also supports the ICTV viral taxonomy nomenclature
+via a separate database built from ICTV sequences and annotations. Results are saved to
+the `taxonomy` folder.
 
 ### Viral-host prediction
 
-This step is to predict the host of the viral contigs or bins using iPHoP, which is a new tool that combined signals and results of multiple viral-host prediction tools. The results were saved to the `viralhost` folder.
+Viral host prediction is performed using [iPHoP](https://bitbucket.org/srouxjgi/iphop), which integrates signals from multiple viral-host prediction tools. Results are saved to the `viralhost` folder.
 
 ### Viral replication cycle prediction
 
-This step is to predict the replication cycle of the viral contigs or bins using either Bacphlip or Replicyc. The results were merged into the final annotation file.
+The replication cycle of viral contigs or bins is predicted using either [BACPHLIP](https://github.com/adamhockenberry/bacphlip) or [Replidec](https://github.com/deng-lab/Replidec). Results are merged into the final annotation file.
 
 ### Merged output
 
-All contig annotation results and abundance table were merged into a TreeSummarizedExperiment object, which can be imported into R, or uploaded to ViroProfiler-viewer for further annalysis, such as diversity annalysis and differential abundance analysis.
+All contig annotation results and the abundance table are merged into a [TreeSummarizedExperiment](https://bioconductor.org/packages/TreeSummarizedExperiment/) R object (`viroprofiler_output.rds`). This object can be imported into R for custom analysis or uploaded to [ViroProfiler-viewer](https://github.com/deng-lab/viroprofiler-viewer) for interactive exploration, including diversity analysis and differential abundance analysis.
 
 ### MultiQC
 
@@ -141,9 +165,11 @@ Results generated by MultiQC collate pipeline QC from supported tools e.g. FastQ
 <summary>Output files</summary>
 
 - `pipeline_info/`
-  - Reports generated by Nextflow: `execution_report.html`, `execution_timeline.html`, `execution_trace.txt` and `pipeline_dag.dot`/`pipeline_dag.svg`.
+  - Reports generated by Nextflow, each stamped with the time the run started so that
+    several runs can share an `--outdir`: `execution_report_<timestamp>.html`,
+    `execution_timeline_<timestamp>.html`, `execution_trace_<timestamp>.txt` and
+    `pipeline_dag_<timestamp>.html`.
   - Reports generated by the pipeline: `pipeline_report.html`, `pipeline_report.txt` and `software_versions.yml`. The `pipeline_report*` files will only be present if the `--email` / `--email_on_fail` parameter's are used when running the pipeline.
-  - Reformatted samplesheet files used as input to the pipeline: `samplesheet.valid.csv`.
 
 </details>
 

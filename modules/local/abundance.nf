@@ -14,6 +14,7 @@ process MAPPING2CONTIGS {
     when:
     task.ext.when == null || task.ext.when
     
+    script:
     """
     # Only use paired-end reads for mapping
     minimap2 -t $task.cpus -ax sr $contigs $illumina | \\
@@ -28,6 +29,17 @@ process MAPPING2CONTIGS {
     "${task.process}":
         minimap2: \$(minimap2 --version)
         samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    touch ${meta.id}.bam
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        minimap2: 2.24
+        samtools: 1.15.1
     END_VERSIONS
     """
 }
@@ -49,11 +61,23 @@ process CONTIGINDEX {
     def args = task.ext.args ?: ''
     """
     mkdir -p bowtie2
-    bowtie2-build $args --threads $task.cpus $contigs bowtie2/bowtie2idx  
+    bowtie2-build $args --threads $task.cpus $contigs bowtie2/bowtie2idx
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         bowtie2: \$(echo \$(bowtie2 --version 2>&1) | sed 's/^.*bowtie2-align-s version //; s/ .*\$//')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    mkdir -p bowtie2
+    touch bowtie2/idx.1.bt2
+    touch bowtie2/idx.rev.1.bt2
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        bowtie2: 2.4.4
     END_VERSIONS
     """
 }
@@ -79,7 +103,7 @@ process MAPPING2CONTIGS2 {
     def prefix = task.ext.prefix ?: "${meta.id}"
     def illumina_reads = illumina ? ( meta.single_end ? "-s $illumina" : "-1 ${illumina[0]} -2 ${illumina[1]}" ) : ""
     """
-    bowtie2 -x ${bowtie2}/bowtie2idx -1 ${illumina[0]} -2 ${illumina[1]} -S ${meta.id}.sam -p $task.cpus
+    bowtie2 -x ${bowtie2}/bowtie2idx $illumina_reads -S ${meta.id}.sam -p $task.cpus
     samtools view -bS ${meta.id}.sam > ${meta.id}_unsorted.bam
     samtools sort ${meta.id}_unsorted.bam -o ${meta.id}_sorted.bam
     samtools index ${meta.id}_sorted.bam
@@ -91,6 +115,18 @@ process MAPPING2CONTIGS2 {
         bowtie2: \$(echo \$(bowtie2 --version 2>&1) | sed 's/^.*bowtie2-align-s version //; s/ .*\$//')
         samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
         coverm: \$(echo \$(coverm --version 2>&1) | sed 's/^.*coverm //; s/ .*\$//')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    touch ${meta.id}.bam
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        bowtie2: 2.4.4
+        samtools: 1.15.1
+        coverm: 0.6.1
     END_VERSIONS
     """
 }
@@ -110,10 +146,15 @@ process ABUNDANCE {
     path "abundance_contigs_rpkm.tsv.gz", emit: ab_rpkm_ch
     path "abundance_contigs_trimmed_mean.tsv.gz", emit: ab_trmean_ch
     path "abundance_contigs_reads_per_base.tsv.gz", emit: ab_rpb_ch
+    // CoverM reports "found N reads mapped out of M total" per sample on stderr. That is
+    // the only place the library size appears, and colData needs it to tell a low
+    // abundance from a shallow sample.
+    path "log_contig_count.txt", emit: ab_count_log_ch
 
     when:
     task.ext.when == null || task.ext.when
 
+    script:
     """
     coverm contig --methods reads_per_base --bam-files $bams -t $task.cpus --min-read-percent-identity 0.95 1> abundance_contigs_reads_per_base.tsv 2> log_contig_reads_per_base.txt
     sed -i '1 s/ Reads per base//g' abundance_contigs_reads_per_base.tsv
@@ -130,5 +171,16 @@ process ABUNDANCE {
     
     # compresss count table
     pigz -p $task.cpus abundance_contigs_*.tsv
+    """
+
+    stub:
+    """
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_count.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_covered_fraction.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_tpm.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_rpkm.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_trimmed_mean.tsv.gz
+    printf 'Contig\tsample1\n' | gzip > abundance_contigs_reads_per_base.tsv.gz
+    printf "[INFO] In sample 'sample1', found 0 reads mapped out of 0 total (0.00%%)\n" > log_contig_count.txt
     """
 }

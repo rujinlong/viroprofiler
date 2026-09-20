@@ -1,38 +1,3 @@
-process BRACKEN_DB {
-    label 'viroprofiler_bracken'
-
-    input:
-    path taxa_mmseqs
-    path contigs
-
-    output:
-    path "brackenDB" , emit: ch_brackenDB_for_bracken
-
-    when:
-    task.ext.when == null || task.ext.when
-
-    script:
-    def args = task.ext.args ?: ''
-    """
-    csvtk filter -t -f "2!=0" ${taxa_mmseqs} | cut -f1 > contig_with_taxa.list
-    seqkit grep -f contig_with_taxa.list ${contigs} > contig_with_taxa.fasta
-
-    csvtk filter -t -f "2!=0" ${taxa_mmseqs} | cut -f1-2 | awk '{print \$1 "\\t" \$1 "|kraken:taxid|" \$2}' > kraken_header.tsv
-    seqkit replace -p '^(.+)\$' -r '{kv}' -k kraken_header.tsv contig_with_taxa.fasta > viroprofiler_ref.fasta
-    
-    # Create kraken2 and bracken database
-    wd=\$(pwd)
-    mkdir -p brackenDB/taxonomy
-    cd brackenDB/taxonomy
-    ln -s ${params.db}/bracken/taxonomy/* .
-    cd \$wd
-    kraken2-build --add-to-library viroprofiler_ref.fasta --db brackenDB
-    kraken2-build --build --db brackenDB
-    bracken-build -d brackenDB
-    kraken2-build --clean --db brackenDB
-    """
-}
-
 process BRACKEN {
     tag "$meta.id"
     label 'viroprofiler_bracken'
@@ -87,6 +52,18 @@ process BRACKEN {
         bracken: ${VERSION}
     END_VERSIONS
     """
+
+    stub:
+    def prefix = task.ext.prefix ?: "${meta.id}"
+    """
+    printf 'name\ttaxonomy_id\ttaxonomy_lvl\tkraken_assigned_reads\tadded_reads\tnew_est_reads\tfraction_total_reads\n' > ${prefix}.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        kraken2: 2.1.2
+        bracken: 2.8
+    END_VERSIONS
+    """
 }
 
 
@@ -111,6 +88,11 @@ process BRACKEN_COMBINEBRACKENOUTPUTS {
     combine_bracken_outputs.py \\
         --files ${input} \\
         -o abundance_bracken.txt
+    """
+
+    stub:
+    """
+    printf 'name\ttaxonomy_id\tfraction_total_reads\n' > abundance_bracken.txt
     """
 }
 

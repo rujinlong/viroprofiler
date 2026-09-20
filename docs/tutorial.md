@@ -46,11 +46,12 @@ sampleID3,AEG588A3_S3_L002_R1_001.fastq.gz,AEG588A3_S3_L002_R2_001.fastq.gz
 
 | Column    | Description |
 | --------- | ----------- |
-| `sample`  | Custom sample name. This entry will be identical for multiple sequencing libraries/runs from the same sample. Spaces in sample names are automatically converted to underscores (`_`). |
+| `sample`  | Custom sample name. This entry will be identical for multiple sequencing libraries/runs from the same sample. |
 | `fastq_1` | Full path to FastQ file for Illumina short reads 1. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz". |
 | `fastq_2` | Full path to FastQ file for Illumina short reads 2. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz". |
 
-An [example samplesheet](../assets/samplesheet.csv) has been provided with the pipeline.
+An [example samplesheet](https://github.com/deng-lab/viroprofiler/blob/main/assets/samplesheet.csv)
+has been provided with the pipeline, under `assets/`.
 
 Use the `--input` parameter to specify its location, or set `input` in the [params.yml](https://github.com/deng-lab/viroprofiler/blob/main/params.yml) file.
 
@@ -85,22 +86,24 @@ Note that the pipeline will create the following files in your working directory
 ```console
 work                # Directory containing the nextflow working files
 output              # Output folder (can be modified with `--outdir` parameter)
-.nextflow_log       # Log file from Nextflow
+.nextflow.log       # Log file from Nextflow
 # Other nextflow hidden files, eg. history of pipeline runs and old logs.
 ```
 
 ### Reproducible data analysis
 
-For reproducibility, we recommend using a specific version of ViroProfiler. You can always run a specific version of ViroProfiler by specifying the version number. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since. First, go to the [deng-lab/viroprofiler releases page](https://github.com/deng-lab/viroprofiler/releases) and find the latest version number (eg. `v0.2`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r v0.2`. This version number will be logged in reports when you run the pipeline, so that you'll know what you used when you look back in the future. For example, to run version `v0.2` of the pipeline:
+For reproducibility, we recommend using a specific version of ViroProfiler. You can always run a specific version of ViroProfiler by specifying the version number. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since. First, go to the [deng-lab/viroprofiler releases page](https://github.com/deng-lab/viroprofiler/releases) and find the latest version number (eg. `v1.0.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r v1.0.1`. This version number will be logged in reports when you run the pipeline, so that you'll know what you used when you look back in the future. For example, to run version `v1.0.1` of the pipeline:
 
 ```bash
-nextflow run deng-lab/viroprofiler -r v0.2 -profile singularity
+nextflow run deng-lab/viroprofiler -r v1.0.1 -profile singularity \
+    --input samplesheet.csv --db /path/to/db
 ```
 
 If the pipeline fails, you can resume the pipeline from the last successful step by adding `-resume` to the command. For example:
 
 ```bash
-nextflow run deng-lab/viroprofiler -r v0.2 -profile singularity -resume
+nextflow run deng-lab/viroprofiler -r v1.0.1 -profile singularity -resume \
+    --input samplesheet.csv --db /path/to/db
 ```
 
 ### Description of pipeline options and parameters
@@ -144,20 +147,26 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 | <div style="width:100px">Parameter</div> | Required | Default | Description |
 | :--------------------------------------- | :------- | :------ | :---------- |
 | `--input`  | :material-check: | NA       | Input samplesheet describing all the samples to be analysed |
-| `--output` | :material-check: | output  |  Name of directory to store output values |
+| `--outdir` | :material-check: | output  | Name of directory to store output values |
 | `--db` | :material-check: | ${HOME}/viroprofiler | Path containing required ViroProfiler databases |
+| `--mode` | :material-close: | all | Last stage to run. `setup` builds the databases and reads no samplesheet; the others are cumulative, so `contiglib` runs everything `fastp` runs and then assembles, cleans and dereplicates. `fastqc` and `fastp` are incompatible with `--reads_type clean`, which skips both |
+| `--input_contigs` | :material-close: | false | Path to pre-assembled contigs (skips assembly) |
+| `--single_end` | :material-close: | false | Set to `true` for single-end reads |
+| `--reads_type` | :material-close: | raw | Input reads type: `raw` or `clean` (skip trimming) |
 
 ##### On/Off processes
 
 | <div style="width:180px">Parameter</div> | Required | Default | Description |
 | :--------------------------------------- | :------- | :------ | :---------- |
-| `--use_dram` | :material-close: | false | Use DRAM or not |
-| `--use_abricate` | :material-close: | false | Use abricate or not |
-| `--use_decontam` | :material-close: | false | Remove host contamination from reads or not |
-| `--use_eggnog` | :material-close: | false | Use eggnog-mapper to annotate proteins or not |
-| `--use_iphop` | :material-close: | false | Use iPhOP to predict host or not |
-| `--use_kraken2` | :material-close: | false | Use kraken2 to classify reads or not |
-| `--use_phamb` | :material-close: | false | Use phamb to bin contigs or not |
+| `--use_checkamg` | :material-close: | true | Use CheckAMG to curate auxiliary genes (AMG/AReG/APG) |
+| `--use_vibrant` | :material-close: | true | Run VIBRANT. It contributes a third opinion to the candidate-virus union and a genome quality call to the TSE; geNomad does detection and CheckAMG does auxiliary genes |
+| `--use_dram` | :material-close: | true | Use DRAM-v for functional annotation |
+| `--use_iphop` | :material-close: | true | Use iPHoP for viral-host prediction |
+| `--use_abricate` | :material-close: | false | Use abricate for AMR gene detection |
+| `--use_decontam` | :material-close: | false | Remove host contamination from reads |
+| `--use_eggnog` | :material-close: | false | Use eggNOG-mapper for protein annotation |
+| `--use_kraken2` | :material-close: | false | Use Kraken2 for read classification |
+| `--use_phamb` | :material-close: | false | Download the VOGDB and miComplete HMM sets that PHAMB's features are computed from. Only affects `--mode setup`; the binner itself is selected with `--binning` |
 
 
 ##### Other parameters
@@ -166,16 +175,16 @@ Specify the path to a specific config file (this is a core Nextflow command). Se
 | :--------------------------------------- | :------- | :------ | :---------- |
 | `--prot_cluster_min_similarity` | :material-close: | 0.7 | Minimum similarity of protein seqs in the same cluster |
 | `--prot_cluster_min_coverage` | :material-close: | 0.9 | Minimum similarity of protein seqs in the same cluster |
-| `--binning` | :material-close: | null | Which binning tool to use, `vRhyme`, `phamb` or `false` |
-| `--binning_minlen_contig` | :material-close: | 2000 | Congits shorter than this value will not be used for binning |
-| `--binning_minlen_bin` | :material-close: | 2000 | Bin size shorter than this value will be removed from down-stream analyses |
-| `--dvf_qvalue` | :material-close: | 0.1 | q-value used in `DeepVirFinder` |
+| `--binning` | :material-close: | false | Which binning tool to use: `vrhyme`, `phamb` or `false`. `phamb` is amd64-only, because it classifies VAMB's clusters and VAMB has no linux-aarch64 build; it is also approximate, because its random forest was fitted on DeepVirFinder scores and is fed geNomad's instead |
+| `--binning_minlen_contig` | :material-close: | 5000 | Contigs shorter than this value will not be used for binning |
+| `--binning_minlen_bin` | :material-close: | 5000 | Bins shorter than this value will be removed from downstream analyses |
+| `--genomad_preset` | :material-close: | "default" | geNomad post-classification filtering: `default`, `conservative` or `relaxed` |
+| `--genomad_splits` | :material-close: | 0 | Split geNomad's MMseqs2 marker search into this many chunks to cap memory use; 0 leaves it unsplit |
+| `--checkamg_min_weight` | :material-close: | 0.6 | Minimum CheckAMG AMG weight for an auxiliary gene to be reported; higher is more conservative |
 | `--virsorter2_groups` | :material-close: | "dsDNAphage" | Viral category detected by `VirSorter2`, could be any combination of `dsDNAphage,NCLDV,RNA,ssDNA,lavidaviridae` |
-| `--contig_minlen_vcontact2` | :material-close: | 10000 | Contigs/Bins short than this value will not be used in `vConTACT2` |
-| `--pc_inflation` | :material-close: | 1.5 | Protein cluster inflation value used in `vConTACT2` |
-| `--vc_inflation` | :material-close: | 1.5 | Viral cluster inflation value used in `vConTACT2` |
-| `--taxa_db_source` | :material-close: | "NCBI" | Taxonomy database, could be either `NCBI` or `ICTV` |
-| `--replicyc` | :material-close: | "replidec" | Viral replication cycle prediction method, could be either `replidec` or `bacphlip` |
+| `--contig_minlen_vcontact3` | :material-close: | 10000 | Contigs/Bins short than this value will not be used in `vConTACT3` |
+| `--vcontact3_db_version` | :material-close: | 232 | vConTACT3 reference database version. Each vConTACT3 release accepts exactly one version |
+| `--replicyc` | :material-close: | "bacphlip" | Viral replication cycle prediction method, could be either `replidec` or `bacphlip` |
 
 
 ##### Max job request options
@@ -188,8 +197,8 @@ Set the top limit for requested resources for any single job. If you are running
 
 | Parameter | Default | Description |
 | :-------- | :------ | :---------- |
-| `--max_cpus`   | 4     | Maximum number of CPUs that can be requested for any single job   |
-| `--max_memory` | 20.GB  | Maximum amount of memory that can be requested for any single job |
+| `--max_cpus`   | 16    | Maximum number of CPUs that can be requested for any single job   |
+| `--max_memory` | 128.GB | Maximum amount of memory that can be requested for any single job |
 | `--max_time`   | 120.h   | Maximum amount of time that can be requested for any single job   |
 
 ### Outputs

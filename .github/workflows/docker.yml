@@ -1,71 +1,156 @@
 name: Docker
 
+# Builds every image under docker/ on x86-64, and publishes the result from the main branch
+# of deng-lab/viroprofiler, the only repository that holds the Docker Hub credentials.
+#
+# Runs on any change under docker/, not only on a tag. Firing on tags alone made the
+# lockfile gate below unreachable in practice: the images and their locks are edited on
+# branches, and by the time a tag exists the drift is already released.
 on:
   push:
-    tags:
-      - 'v*'
-      - 'docker*'
+    branches: [main, dev_ru]
+    paths:
+      - "docker/**"
+      - "conf/modules.config"
+      - ".github/workflows/docker.yml"
+  pull_request:
+    paths:
+      - "docker/**"
+      - "conf/modules.config"
+      - ".github/workflows/docker.yml"
+  workflow_dispatch:
+    inputs:
+      push:
+        description: "Push the images to Docker Hub (deng-lab/viroprofiler only)"
+        type: boolean
+        default: false
+
+env:
+  # One tag for every image, and the tag conf/modules.config names. Bump both together;
+  # check_tags fails when they disagree. Never reuse a tag for different content: an
+  # installation that has the old image cached keeps running it, silently.
+  IMAGE_TAG: v1.0.1
 
 jobs:
-  push_to_registry:
-    name: Push Docker image to Docker Hub
+  # The lockfiles are what make the images reproducible, so verify them on every push --
+  # a lock nothing checks is a comment. `--dry-run` is required: plain `pixi lock --check`
+  # exits non-zero on drift but REWRITES pixi.lock while doing so, leaving CI with a dirty
+  # tree and the drift silently absorbed.
+  check_locks:
+    name: pixi.lock matches pixi.toml
     runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Install pixi
+        uses: prefix-dev/setup-pixi@v0
+        with:
+          pixi-version: v0.73.0
+          run-install: false
+
+      - name: Verify every lockfile is up to date
+        run: |
+          status=0
+          for manifest in docker/*/pixi.toml; do
+              dir=$(dirname "$manifest")
+              if pixi lock --check --dry-run --manifest-path "$manifest"; then
+                  echo "OK    $dir"
+              else
+                  echo "STALE $dir -- run 'pixi lock' there, re-test the image, and commit the result"
+                  status=1
+              fi
+          done
+          exit $status
+
+  # The pipeline pulls whatever conf/modules.config names. Publishing under one tag while
+  # the config names another leaves every profile except arm64_local pointing at an image
+  # that does not exist -- which is the state this repository was in for a year.
+  check_tags:
+    name: conf/modules.config names IMAGE_TAG
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Every denglab/ image in conf/modules.config carries the tag this workflow builds
+        run: |
+          status=0
+          while read -r ref; do
+              tag="${ref##*:}"
+              if [ "$tag" = "$IMAGE_TAG" ]; then
+                  echo "OK    $ref"
+              else
+                  echo "DRIFT $ref -- this workflow builds :$IMAGE_TAG"
+                  status=1
+              fi
+          done < <(grep -oE "denglab/viroprofiler-[a-z0-9]+:[A-Za-z0-9._-]+" conf/modules.config | sort -u)
+          exit $status
+
+  # Every Dockerfile ends with an `env -i` smoke test that exercises its tools under the
+  # image's own PATH, so a successful build is also a successful smoke test. A fork, a pull
+  # request and dev_ru build without pushing; the main branch of deng-lab/viroprofiler
+  # pushes, as does a manual run there with `push` ticked.
+  build:
+    name: amd64 - ${{ matrix.image }}
+    needs: [check_locks, check_tags]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # - dockerfile: ./docker/viroprofiler-base/Dockerfile
-          #   image: denglab/viroprofiler-base
-          # - dockerfile: ./docker/viroprofiler-binning/Dockerfile
-          #   image: denglab/viroprofiler-binning
-          # - dockerfile: ./docker/viroprofiler-geneannot/Dockerfile
-          #   image: denglab/viroprofiler-geneannot
-          # - dockerfile: ./docker/viroprofiler-host/Dockerfile
-          #   image: denglab/viroprofiler-host
-          # - dockerfile: ./docker/viroprofiler-replicyc/Dockerfile
-          #   image: denglab/viroprofiler-replicyc
-          # - dockerfile: ./docker/viroprofiler-taxa/Dockerfile
-          #   image: denglab/viroprofiler-taxa
-          # - dockerfile: ./docker/viroprofiler-abundance/Dockerfile
-          #   image: denglab/viroprofiler-abundance
-          # - dockerfile: ./docker/viroprofiler-vibrant/Dockerfile
-          #   image: denglab/viroprofiler-vibrant
-          # - dockerfile: ./docker/viroprofiler-bracken/Dockerfile
-          #   image: denglab/viroprofiler-bracken
-          # - dockerfile: ./docker/viroprofiler-phamb/Dockerfile
-          #   image: denglab/viroprofiler-phamb
-          - dockerfile: ./docker/viroprofiler-virsorter2/Dockerfile
-            image: denglab/viroprofiler-virsorter2
-    permissions:
-      contents: read
-      packages: write
+        image:
+          - viroprofiler-abundance
+          - viroprofiler-base
+          - viroprofiler-binning
+          - viroprofiler-bracken
+          - viroprofiler-checkamg
+          - viroprofiler-geneannot
+          - viroprofiler-genomad
+          - viroprofiler-host
+          - viroprofiler-qc
+          - viroprofiler-replicyc
+          - viroprofiler-vclust
+          - viroprofiler-vcontact3
+          - viroprofiler-vibrant
+          - viroprofiler-viewer
+          - viroprofiler-virsorter2
+          - viroprofiler-vitap
+    env:
+      PUBLISH: ${{ github.repository == 'deng-lab/viroprofiler' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.push == true)) }}
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # Docker Buildx
+      # A default runner has ~14 GB free, and the larger images do not fit beside the
+      # preinstalled Android SDK and .NET toolchains.
+      - name: Reclaim disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-      
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          images: ${{ matrix.image }}
-      
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+
+      # provenance is off so that each tag is a plain single-platform image rather than a
+      # manifest list with an attestation entry, which some Apptainer releases refuse.
+      - name: Build, and push from deng-lab/viroprofiler main
+        uses: docker/build-push-action@v6
         with:
           context: "."
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          file: ./docker/${{ matrix.image }}/Dockerfile
+          platforms: linux/amd64
+          push: ${{ env.PUBLISH == 'true' }}
+          provenance: false
+          tags: denglab/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

@@ -1,3 +1,9 @@
 *.config linguist-language=nextflow
 modules/nf-core/** linguist-generated
 subworkflows/nf-core/** linguist-generated
+
+# The PHAMB fixture. Git's auto-detection already treats these as binary, but a
+# corrupted BAM would not surface until VAMB failed to parse it in CI, several
+# steps and one 6.4 GB download later -- so say it rather than rely on detection
+# surviving someone's core.autocrlf.
+assets/test_phamb/bams/*.bam binary

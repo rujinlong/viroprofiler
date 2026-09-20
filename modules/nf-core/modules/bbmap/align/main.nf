@@ -55,4 +55,17 @@ process BBMAP_ALIGN {
         pigz: \$( pigz --version 2>&1 | sed 's/pigz //g' )
     END_VERSIONS
     """
+
+    stub:
+    def prefix = task.ext.prefix ?: "${meta.id}"
+    """
+    touch ${prefix}.bam
+    touch ${prefix}.bbmap.log
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        bbmap: 38.92
+        samtools: 1.15.1
+    END_VERSIONS
+    """
 }

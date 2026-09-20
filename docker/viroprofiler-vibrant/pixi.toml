@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# ViroProfiler VIBRANT image (process labels: viroprofiler_vibrant)
+#
+# VIBRANT contributes a third opinion to the candidate-virus union and a genome
+# quality call to the TSE. Its own AMG tables are not consumed by the pipeline.
+# ---------------------------------------------------------------------------
+[workspace]
+name = "viroprofiler-vibrant"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+# `ps`, which Nextflow's trace observer calls for per-task resource metrics.
+procps-ng = "4.0.0.*"
+vibrant = "*"

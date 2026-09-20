@@ -36,4 +36,27 @@ process DECONTAM {
         bbmap: \$(bbversion.sh)
     END_VERSIONS
     """
+
+    stub:
+    def prefix = task.ext.prefix ?: "${meta.id}"
+    if (meta.single_end) {
+        """
+        printf '>r1\nACGT\n' | gzip > ${prefix}.nocontam.fq.gz
+
+        cat <<-END_VERSIONS > versions.yml
+        "${task.process}":
+            bbmap: 38.92
+        END_VERSIONS
+        """
+    } else {
+        """
+        printf '>r1\nACGT\n' | gzip > ${prefix}_R1.nocontam.fq.gz
+        printf '>r1\nACGT\n' | gzip > ${prefix}_R2.nocontam.fq.gz
+
+        cat <<-END_VERSIONS > versions.yml
+        "${task.process}":
+            bbmap: 38.92
+        END_VERSIONS
+        """
+    }
 }

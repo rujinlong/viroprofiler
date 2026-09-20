@@ -6,14 +6,17 @@
 | vRhyme        | Binning                             | GPL v3      |
 | Phamb         | Binning                             | MIT License |
 | CheckV        | Virus detection and QC              | BSD license |
+| Vclust        | Contig library dereplication        | GPL v3      |
 | VirSorter2    | Virus detection                     | GPL v2      |
-| DeepVirFinder | Virus detection                     | USC-RL v1.0 |
+| geNomad       | Virus detection                     | Apache 2.0  |
 | VIBRANT       | Virus detection and gene annotation | GPL v3      |
+| CheckAMG      | Auxiliary gene curation             | GPL v3      |
 | DRAM          | Gene annotation                     | GPL v3      |
 | eggnog-mapper | Gene annotation                     | GPL v3      |
 | abricate      | Gene annotation                     | GPL v2      |
-| MMseqs2       | Taxonomy assignment                 | GPL v3      |
-| vConTACT2     | Taxonomy assignment                 | GPL v3      |
+| MMseqs2       | Sequence clustering and search      | GPL v3      |
+| vConTACT3     | Taxonomy assignment                 | GPL v3      |
+| VITAP         | Taxonomy assignment                 | GPL v3      |
 | Bacphlip      | Lifestyle prediction                | MIT License |
 | Replidec      | Lifestyle prediction                | MIT License |
 | iPHoP         | Host prediction                     | GPL v3      |
@@ -33,7 +36,7 @@
 
 - [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
 
-- [fastp](https://)
+- [fastp](https://github.com/OpenGene/fastp)
   > Chen, Shifu, et al. "fastp: an ultra-fast all-in-one FASTQ preprocessor." Bioinformatics 34.17 (2018): i884-i890.
 
 - [BBMap](https://jgi.doe.gov/data-and-tools/software-tools/bbtools/bb-tools-user-guide/bbmap-guide/)
@@ -50,11 +53,20 @@
 - [CheckV](https://bitbucket.org/berkeleylab/CheckV)
   > Nayfach, Stephen, et al. "CheckV assesses the quality and completeness of metagenome-assembled viral genomes." Nature biotechnology 39.5 (2021): 578-585.
 
+- [Vclust](https://github.com/refresh-bio/vclust)
+  > Zielezinski, Andrzej, et al. "Ultrafast and accurate sequence alignment and clustering of viral genomes." Nature Methods (2025).
+
 - [VirSorter2](https://github.com/jiarong/VirSorter2)
   > Guo, Jiarong, et al. "VirSorter2: a multi-classifier, expert-guided approach to detect diverse DNA and RNA viruses." Microbiome 9.1 (2021): 1-13.
 
-- [DeepVirFinder](https://github.com/jessieren/DeepVirFinder)
-  > Ren, Jie, et al. "Identifying viruses from metagenomic data using deep learning." Quantitative Biology 8.1 (2020): 64-77.
+- [geNomad](https://github.com/apcamargo/genomad)
+  > Camargo, Antonio Pedro, et al. "Identification of mobile genetic elements with geNomad." Nature Biotechnology 42.8 (2024): 1303-1312.
+
+- [CheckAMG](https://github.com/AnantharamanLab/CheckAMG)
+  > Kosmopoulos, James C., et al. CheckAMG: automated discovery and curation of Auxiliary
+  > Metabolic Genes (AMGs), Auxiliary Regulatory Genes (AReGs) and Auxiliary Physiology
+  > Genes (APGs) encoded by viral genomes. Anantharaman Lab.
+  > (Check the repository for the current citation before publishing.)
 
 - [VIBRANT](https://github.com/AnantharamanLab/VIBRANT)
   > Kieft, Kristopher, Zhichao Zhou, and Karthik Anantharaman. "VIBRANT: automated recovery, annotation and curation of microbial viruses, and evaluation of viral community function from genomic sequences." Microbiome 8.1 (2020): 1-23.
@@ -68,8 +80,11 @@
 - [DRAM-v](https://github.com/WrightonLabCSU/DRAM)
   > Shaffer, Michael, et al. "DRAM for distilling microbial metabolism to automate the curation of microbiome function." Nucleic acids research 48.16 (2020): 8883-8900.
 
-- [vConTACT2](https://bitbucket.org/MAVERICLab/vcontact2)
+- [vConTACT3](https://bitbucket.org/MAVERICLab/vcontact3)
   > Bin Jang, Ho, et al. "Taxonomic assignment of uncultivated prokaryotic virus genomes is enabled by gene-sharing networks." Nature biotechnology 37.6 (2019): 632-639.
+
+- [VITAP](https://github.com/DrKaiyangZheng/VITAP)
+  > Zheng, Kaiyang, et al. "VITAP: a high precision tool for DNA and RNA viral classification based on meta-omic data." Nature Communications 16.1 (2025): 2226.
 
 - [MMseqs2](https://github.com/soedinglab/MMseqs2)
   > Steinegger, Martin, and Johannes Söding. "MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets." Nature biotechnology 35.11 (2017): 1026-1028.

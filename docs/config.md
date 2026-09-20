@@ -11,8 +11,7 @@ wget -O example_custom.config "https://raw.githubusercontent.com/deng-lab/viropr
 nextflow run deng-lab/viroprofiler -c example_custom.config
 ```
 
-Default configuration
----------------------
+## Default configuration
 
 ```groovy
 profiles {
@@ -79,7 +78,7 @@ process {
         memory = "40 GB"
     }
 
-    withName: MAPPING2CONTIGS {
+    withName: MAPPING2CONTIGS2 {
         cpus = 2
         memory = "60 GB"
     }
@@ -89,7 +88,7 @@ process {
         memory = "40 GB"
     }
 
-    withName: DVF {
+    withName: GENOMAD {
         cpus = 8
         memory = "60 GB"
     }
@@ -140,14 +139,9 @@ process {
         memory = "200 GB"
     }
 
-    withName: TAXONOMY_VCONTACT {
+    withName: TAXONOMY_VCONTACT3 {
         cpus = 4
         memory = "100 GB"
-    }
-
-    withName: TAXONOMY_MMSEQS {
-        cpus = 4
-        memory = "120 GB"
     }
 
     withName: VIRALHOST_IPHOP {
