@@ -123,9 +123,9 @@ This is 1.0.1, the first release since the published version;
 [vpfkit](#the-r-side-vpfkit-and-the-viewer) 0.6.0 is its R side, with 1125 tests passing and
 `R CMD check` reporting 0 errors, 0 warnings and 0 notes here — on Linux, at the release
 version of R. That is narrower than it sounds: vpfkit's CI matrix also builds on Windows,
-macOS, R devel and R oldrel-1, and two of those are still red for reasons that have nothing to
-do with this pipeline. [The R side](#the-r-side-vpfkit-and-the-viewer) has the breakdown.
-`dev_ru` is left unsquashed so that it can be squash-merged into `main`. It is pushed.
+macOS and R devel. [The R side](#the-r-side-vpfkit-and-the-viewer) has the breakdown of what
+each cell covers. `main` carries the squash of `dev_ru`; both are pushed to
+`rujinlong/viroprofiler` and `deng-lab/viroprofiler`.
 
 ## Pipeline shape
 
