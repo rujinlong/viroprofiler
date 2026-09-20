@@ -342,3 +342,29 @@ jobs:
           path: |
             mode_*.log
             .nextflow.log
+
+  # Check 0 in docs/HANDOFF.md: the strict parser's own verdict on every workflow, module
+  # and config file, including lib/. Warnings are reported and tolerated; an error fails.
+  lint:
+    name: nextflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v2
+        with:
+          version: ">=26.04.0"
+
+      - name: Lint
+        run: nextflow lint -o concise -project-dir . . 2>&1 | tee lint.log
+
+      - name: No file may have errors
+        run: |
+          if grep -qE "[0-9]+ files? had [0-9]+ errors?" lint.log; then
+            echo "=== lint errors ==="; grep -iE "error" lint.log; exit 1
+          fi
+          grep -q "Nextflow linting complete" lint.log
