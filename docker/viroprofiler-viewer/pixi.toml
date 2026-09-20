@@ -39,6 +39,11 @@ r-fontawesome = "*"
 r-ggplot2 = "*"
 r-ggrepel = "*"
 r-golem = "*"
+# vpfkit imports `here` directly. golem 0.5 depended on it, which is why the
+# aarch64 solve had it without anyone asking; golem 1.0, which linux-64 resolves
+# to, does not, and `install_github()` then fails with "dependency 'here' is not
+# available". Every vpfkit import has to be declared here in its own right.
+r-here = "*"
 r-htmltools = "*"
 r-magrittr = "*"
 r-openxlsx = "*"
